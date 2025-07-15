@@ -27,6 +27,7 @@
 #include <lwip/ip_addr.h>
 #include <lwip/nd6.h>
 #include <lwip/netif.h>
+#include <app/server/Dnssd.h>
 
 #include <platform/internal/GenericConnectivityManagerImpl_UDP.ipp>
 
@@ -94,7 +95,7 @@ void ConnectivityManagerImpl::OnInternetConnectivityChangeEvent(const ChipDevice
 
     ChipLogProgress(DeviceLayer, "%s", __func__);
 
-    // chip::app::DnssdServer::Instance().StartServer();
+    chip::app::DnssdServer::Instance().StartServer();
 
     // if (event->InternetConnectivityChange.IPv4 == kConnectivity_Established ||
     //    event->InternetConnectivityChange.IPv6 == kConnectivity_Established)
