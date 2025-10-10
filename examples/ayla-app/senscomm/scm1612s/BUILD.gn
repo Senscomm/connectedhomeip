@@ -22,6 +22,7 @@ import("${chip_root}/src/platform/device.gni")
 import("${scm1612s_sdk_build_root}/scm1612s_executable.gni")
 import("${scm1612s_sdk_build_root}/scm1612s_sdk.gni")
 import("${scm1612s_sdk_build_root}/scm1612s_ayla.gni")
+import("./args.gni")
 
 assert(current_os == "freertos")
 
@@ -43,10 +44,11 @@ declare_args() {
   build_update_image = false
 }
 
-#chip_data_model("ayla-demo") {
-#  zap_file = "${scm1612s_project_dir}/data_model/ayla_demo.zap"
-#  is_server = true
-#}
+chip_data_model("ayla-demo") {
+  zap_file = "${scm1612s_project_dir}/data_model/ayla_demo.zap"
+  external_clusters = [ "AYLA_LOCAL_CONTROL_CLUSTER", "AYLA_BASE_CLUSTER" ]
+  is_server = true
+}
 
 scm1612s_sdk_sources("ayla_app_sdk_sources") {
   sources = [ "${scm1612s_project_dir}/include/CHIPProjectConfig.h" ]
@@ -80,7 +82,7 @@ scm1612s_ayla_sources("ayla_app_ayla_sources") {
   public_configs = [
     "${chip_root}/third_party/senscomm/scm1612s:scm1612s_sdk_config"
   ]
-  #public_deps = [ ":ayla-demo" ]
+  public_deps = [ ":ayla-demo" ]
 }
 
 scm1612s_postbuild("ayla_postbuild") {
