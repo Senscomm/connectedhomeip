@@ -70,6 +70,7 @@ static int scm_demo_spake2p_config_check()
     int rc = 1;
 
     if (!SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_SetupDiscriminator) || 
+        !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_SetupPinCode)|| 
         !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pIterationCount) ||
         !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pSalt) || 
         !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pVerifier)) {
@@ -512,7 +513,14 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pIterationCount(uint32_t & iterationCou
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    iterationCount = 1000;
+    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check()) 
+    {
+        iterationCount = CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_ITERATION_COUNT;
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValue(SCMDemoConfig::kConfigKey_Spake2pIterationCount, iterationCount));
+	}
 
     return CHIP_NO_ERROR;
 #endif
@@ -541,6 +549,18 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pSalt(MutableByteSpan & saltBuf)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
+    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check()) 
+    {
+        saltB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT);
+        ReturnErrorCodeIf(saltB64Len > sizeof(saltB64), CHIP_ERROR_BUFFER_TOO_SMALL);
+        memcpy(saltB64, CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT, saltB64Len);
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValueStr(SCMDemoConfig::kConfigKey_Spake2pSalt, 
+            saltB64, sizeof(saltB64), saltB64Len));
+	}
+
     size_t saltLen = chip::Base64Decode32(saltB64, saltB64Len, reinterpret_cast<uint8_t *>(saltB64));
 
     ReturnErrorCodeIf(saltLen > saltBuf.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
@@ -616,10 +636,6 @@ CHIP_ERROR FactoryDataProvider::GetSetupPasscode(uint32_t & setupPasscode)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-
-#if 0
-    setupPasscode = 20202021;
-#else
     uint32_t val;
 
     if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check())
@@ -632,7 +648,7 @@ CHIP_ERROR FactoryDataProvider::GetSetupPasscode(uint32_t & setupPasscode)
     }
 
     setupPasscode = static_cast<uint32_t>(val);
-#endif
+
     return CHIP_NO_ERROR;
 #endif
 }
