@@ -45,7 +45,7 @@ declare_args() {
 }
 
 chip_data_model("ayla-demo") {
-  zap_file = "${scm1612s_project_dir}/data_model/ayla_demo.zap"
+  zap_file = "${scm1612s_project_dir}/data_model/${product_class}/ayla_demo.zap"
   external_clusters = [ "AYLA_LOCAL_CONTROL_CLUSTER", "AYLA_BASE_CLUSTER" ]
   is_server = true
 }
