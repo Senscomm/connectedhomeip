@@ -51,7 +51,7 @@
         }
       ],
       "deviceVersions": [
-        1
+        2
       ],
       "deviceIdentifiers": [
         22
@@ -1978,7 +1978,7 @@
         }
       ],
       "deviceVersions": [
-        1
+        4
       ],
       "deviceIdentifiers": [
         269
@@ -1998,6 +1998,14 @@
             {
               "name": "Identify",
               "code": 0,
+              "mfgCode": null,
+              "source": "client",
+              "isIncoming": 1,
+              "isEnabled": 1
+            },
+            {
+              "name": "TriggerEffect",
+              "code": 64,
               "mfgCode": null,
               "source": "client",
               "isIncoming": 1,
@@ -3150,7 +3158,7 @@
               "side": "server",
               "type": "int16u",
               "included": 1,
-              "storageOption": "RAM",
+              "storageOption": "NVM",
               "singleton": 0,
               "bounded": 0,
               "defaultValue": "0x00FA",
@@ -3294,7 +3302,7 @@
               "side": "server",
               "type": "int16u",
               "included": 1,
-              "storageOption": "RAM",
+              "storageOption": "NVM",
               "singleton": 0,
               "bounded": 0,
               "defaultValue": "",
