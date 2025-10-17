@@ -16,56 +16,65 @@ import("//build_overrides/chip.gni")
 import("//build_overrides/scm1612s.gni")
 
 template("scm1612s_ayla_sources") {
+  product_class = invoker.product_class
   config("ayla_configs") {
     include_dirs = []
     if (defined(invoker.include_dirs)) {
       include_dirs += invoker.include_dirs
     }
     include_dirs += [
-        "${scm1612s_sdk_root}/app/ayla/components/ada",
-        "${scm1612s_sdk_root}/app/ayla/components/ada/include",
-        "${scm1612s_sdk_root}/app/ayla/components/ayla/include",
-        "${scm1612s_sdk_root}/app/ayla/components/al/include",
-        "${scm1612s_sdk_root}/app/ayla/components/al/lwip/include",
-        "${scm1612s_sdk_root}/app/ayla/components/al/wise/include",
-        "${scm1612s_sdk_root}/app/ayla/components/al/mbedtls/include",
-        "${scm1612s_sdk_root}/app/ayla/components/adw",
-        "${scm1612s_sdk_root}/app/ayla/components/adw/include",
-        "${scm1612s_sdk_root}/app/ayla/components/adb/include",
-        "${scm1612s_sdk_root}/app/ayla/components/adm/include",
-        "${scm1612s_sdk_root}/app/ayla/components/jsmn",
-        "${scm1612s_sdk_root}/app/ayla/components/paho/MQTTPacket/src",
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main",
-        "${scm1612s_sdk_root}/api/include",
-        "${scm1612s_sdk_root}/include/FreeRTOS",
-        "${scm1612s_sdk_root}/include/freebsd",
-        "${scm1612s_sdk_root}/lib",
-        "${scm1612s_sdk_root}/lib/lwip/src/include",
-        "${scm1612s_sdk_root}/lib/lwip/ports/freertos/include",
-        "${scm1612s_sdk_root}/lib/mbedtls-2.28.10/include",
-        "${scm1612s_sdk_root}/lib/net",
-        "${scm1612s_sdk_root}/lib/net/http_parser",
-        "${scm1612s_sdk_root}/lib/net/http_server/include",
-        "${scm1612s_sdk_root}/lib/scm_mcuboot/mcuboot/boot/bootutil/include",
-        "${scm1612s_sdk_root}/lib/scm_mcuboot/mcuboot/boot/wise/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble_host/mynewt-nimble/porting/nimble/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/porting/nimble/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/transport/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/porting/npl/wise/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/bas/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/tps/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/gap/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/lls/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/ias/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/dis/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/gatt/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/ans/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/util/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/store/ram/include",
-        "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/store/config/include",
+      "${scm1612s_sdk_root}/app/ayla/components/ada",
+      "${scm1612s_sdk_root}/app/ayla/components/ada/include",
+      "${scm1612s_sdk_root}/app/ayla/components/ayla/include",
+      "${scm1612s_sdk_root}/app/ayla/components/al/include",
+      "${scm1612s_sdk_root}/app/ayla/components/al/lwip/include",
+      "${scm1612s_sdk_root}/app/ayla/components/al/wise/include",
+      "${scm1612s_sdk_root}/app/ayla/components/al/mbedtls/include",
+      "${scm1612s_sdk_root}/app/ayla/components/adw",
+      "${scm1612s_sdk_root}/app/ayla/components/adw/include",
+      "${scm1612s_sdk_root}/app/ayla/components/adb/include",
+      "${scm1612s_sdk_root}/app/ayla/components/adm/include",
+      "${scm1612s_sdk_root}/app/ayla/components/jsmn",
+      "${scm1612s_sdk_root}/app/ayla/components/paho/MQTTPacket/src",
+      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main",
+      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/${product_class}",
+      "${scm1612s_sdk_root}/api/include",
+      "${scm1612s_sdk_root}/include/FreeRTOS",
+      "${scm1612s_sdk_root}/include/freebsd",
+      "${scm1612s_sdk_root}/lib",
+      "${scm1612s_sdk_root}/lib/lwip/src/include",
+      "${scm1612s_sdk_root}/lib/lwip/ports/freertos/include",
+      "${scm1612s_sdk_root}/lib/mbedtls-2.28.10/include",
+      "${scm1612s_sdk_root}/lib/net",
+      "${scm1612s_sdk_root}/lib/net/http_parser",
+      "${scm1612s_sdk_root}/lib/net/http_server/include",
+      "${scm1612s_sdk_root}/lib/scm_mcuboot/mcuboot/boot/bootutil/include",
+      "${scm1612s_sdk_root}/lib/scm_mcuboot/mcuboot/boot/wise/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble_host/mynewt-nimble/porting/nimble/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/porting/nimble/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/transport/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/porting/npl/wise/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/bas/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/tps/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/gap/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/lls/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/ias/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/dis/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/gatt/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/services/ans/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/util/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/store/ram/include",
+      "${scm1612s_sdk_root}/lib/ble/nimble/mynewt-nimble/nimble/host/store/config/include",
     ]
+
+    if (product_class == "led_demo" || product_class == "bulb") {
+      include_dirs += [
+        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bp5758d"
+      ]
+    }
+
     defines = [
       "AYLA_MATTER_SUPPORT",
       "CONFIG_RENDEZVOUS_MODE=2", #Make it a build argument
@@ -105,49 +114,6 @@ template("scm1612s_ayla_sources") {
   # Add sources here
   source_set(ayla_target_name) {
     sources = [
-      #app/reporting
-      "${chip_root}/src/app/reporting/reporting.cpp",
-      "${chip_root}/src/app/reporting/SynchronizedReportSchedulerImpl.cpp",
-      "${chip_root}/src/app/reporting/ReportSchedulerImpl.cpp",
-      "${chip_root}/src/app/reporting/Engine.cpp",
-      #app/util
-      "${chip_root}/src/app/util/binding-table.cpp",
-      #"${chip_root}/src/app/util/MatterCallbacks.cpp",
-      "${chip_root}/src/app/util/attribute-storage.cpp",
-      "${chip_root}/src/app/util/DataModelHandler.cpp",
-      #"${chip_root}/src/app/util/attribute-metadata.cpp",
-      "${chip_root}/src/app/util/privilege-storage.cpp",
-      "${chip_root}/src/app/util/ember-compatibility-functions.cpp",
-      "${chip_root}/src/app/util/generic-callback-stubs.cpp",
-      #"${chip_root}/src/app/util/ember-strings.cpp",
-      "${chip_root}/src/app/util/attribute-table.cpp",
-      "${chip_root}/src/app/util/util.cpp",
-      #app/clusters
-      "${chip_root}/src/app/clusters/descriptor/descriptor.cpp",
-      "${chip_root}/src/app/clusters/general-commissioning-server/general-commissioning-server.cpp",
-      "${chip_root}/src/app/clusters/groups-server/groups-server.cpp",
-      "${chip_root}/src/app/clusters/software-diagnostics-server/software-diagnostics-server.cpp",
-      "${chip_root}/src/app/clusters/fixed-label-server/fixed-label-server.cpp",
-      "${chip_root}/src/app/clusters/operational-credentials-server/operational-credentials-server.cpp",
-      "${chip_root}/src/app/clusters/user-label-server/user-label-server.cpp",
-      "${chip_root}/src/app/clusters/group-key-mgmt-server/group-key-mgmt-server.cpp",
-      "${chip_root}/src/app/clusters/administrator-commissioning-server/administrator-commissioning-server.cpp",
-      "${chip_root}/src/app/clusters/network-commissioning/network-commissioning.cpp",
-      "${chip_root}/src/app/clusters/basic-information/basic-information.cpp",
-      "${chip_root}/src/app/clusters/access-control-server/access-control-server.cpp",
-      "${chip_root}/src/app/clusters/on-off-server/on-off-server.cpp",
-      "${chip_root}/src/app/clusters/bindings/BindingManager.cpp",
-      "${chip_root}/src/app/clusters/bindings/PendingNotificationMap.cpp",
-      "${chip_root}/src/app/clusters/bindings/bindings.cpp",
-      "${chip_root}/src/app/clusters/wifi-network-diagnostics-server/wifi-network-diagnostics-server.cpp",
-      "${chip_root}/src/app/clusters/general-diagnostics-server/GenericFaultTestEventTriggerHandler.cpp",
-      "${chip_root}/src/app/clusters/general-diagnostics-server/general-diagnostics-server.cpp",
-      "${chip_root}/src/app/clusters/diagnostic-logs-server/BDXDiagnosticLogsProvider.cpp",
-      "${chip_root}/src/app/clusters/diagnostic-logs-server/diagnostic-logs-server.cpp",
-      "${chip_root}/src/app/clusters/identify-server/identify-server.cpp",
-      #zzz_generated/app-common
-      "${chip_root}/zzz_generated/app-common/app-common/zap-generated/cluster-objects.cpp",
-      "${chip_root}/zzz_generated/app-common/app-common/zap-generated/attributes/Accessors.cpp",
       #json_format_string
       "${scm1612s_sdk_root}/app/ayla/components/jsmn/jsmn.c",
       #mqtt
@@ -289,38 +255,30 @@ template("scm1612s_ayla_sources") {
       #demo
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_common.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_main.c",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/demo_matter.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/demo_ota.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/sched_conf.c",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/bp5758d.c",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app/callback-stub.cpp",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app/cluster-init-callback.cpp",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/zap-generated/IMClusterCommandHandler.cpp",
+      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/${product_class}/demo_matter.c",
       #entry
       "${scm1612s_sdk_root}/app/ayla/main.c",
     ]
+    if (product_class == "led_demo" || product_class == "bulb") {
+      sources += [
+        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bp5758d/bp5758d.c",
+      ]
+    }
+
     if (defined(invoker.sources)) {
       sources += invoker.sources
     }
 
-    public_deps = [ 
-        "${chip_root}/src/crypto:public_headers",
-        "${chip_root}/src/app/common:attribute-type",
-        "${chip_root}/src/credentials:credentials",
-        "${chip_root}/src/app/common:cluster-objects",
-        "${chip_root}/src/app:app",
-        "${chip_root}/src/app/data-model:data-model",
-        "${chip_root}/src/app/server:server",
-        "${chip_root}/src/platform:platform",
-        "${chip_root}/src/protocols/interaction_model:interaction_model",
-    ]
+    public_deps = []
     if (defined(invoker.public_deps)) {
       public_deps += invoker.public_deps
     }
 
     public_configs = [
-        ":ayla_configs",
-        "${chip_root}/src:includes"
+      ":ayla_configs",
+      "${chip_root}/src:includes"
     ]
     if (defined(invoker.public_configs)) {
       public_configs += invoker.public_configs
