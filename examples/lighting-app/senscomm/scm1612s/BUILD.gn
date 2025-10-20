@@ -42,6 +42,9 @@ declare_args() {
 
   # Build update app
   build_update_image = false
+
+  # Add smart plug
+  smart_plug = true
 }
 
 scm1612s_sdk_sources("lighting_app_sdk_sources") {
@@ -77,7 +80,11 @@ scm1612s_postbuild("lighting_postbuild") {
 }
 
 chip_data_model("senscomm-lighting") {
-  zap_file = "${scm1612s_project_dir}/data_model/lighting-app.zap"
+  if (smart_plug) {
+    zap_file = "${scm1612s_project_dir}/data_model/lighting-app-splug.zap"
+  } else {
+    zap_file = "${scm1612s_project_dir}/data_model/lighting-app.zap"
+  }
   is_server = true
 }
 
@@ -132,7 +139,6 @@ scm1612s_executable("lighting_app") {
       "-fstack-usage",
     ]
   }
-
   output_dir = root_out_dir
 }
 
