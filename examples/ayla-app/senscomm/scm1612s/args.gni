@@ -20,4 +20,4 @@ import("${chip_root}/src/platform/senscomm/scm1612s/args.gni")
 scm1612s_target_project =
     get_label_info(":ayla_app_sdk_sources", "label_no_toolchain")
 
-product_class = "led_demo"
+product_class = "bulb"
