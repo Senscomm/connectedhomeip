@@ -31,17 +31,18 @@
 #include "FactoryDataProvider.h"
 #include "ConfigurationManagerImpl.h"
 
-#define SCM_HASH_LEN		32	/* HMAC SHA256 output length */
-// use default values
-#define SCM_SPAKE2P_ITERATIONS	1000
+#define SCM_HASH_LEN            32  /* HMAC SHA256 output length */
+// we can use our own values, but now use default
+#define SCM_SPAKE2P_ITERATIONS  1000
 #define SCM_SPAKE2P_SALT        "U1BBS0UyUCBLZXkgU2FsdA=="
 
-#define SCM_HASH_PASSCODE_LEN	4	/* 32 bits mod'd to 8 decimal digits */
+#define SCM_HASH_PASSCODE_LEN   4 /* 32 bits mod'd to 8 decimal digits */
+#define SCM_HASH_PASSCODE_OFF   0
+#define SCM_HASH_DISCR_OFF      (SCM_HASH_PASSCODE_OFF + SCM_HASH_PASSCODE_LEN)
 
-#define SCM_HASH_PASSCODE_OFF	0
-#define SCM_HASH_DISCR_OFF	(SCM_HASH_PASSCODE_OFF + SCM_HASH_PASSCODE_LEN)
-
-#define SCM_FACTORY_CONFIG_VALID 1
+// Control the CommissionableData source
+bool gCommissionableDataFsConfigValid = false;
+bool gCommissionableDataUseDefault = false;
 
 using SCMDemoConfig = chip::DeviceLayer::Internal::SCM1612SConfig;
 
@@ -200,6 +201,7 @@ CHIP_ERROR FactoryDataProvider::Init()
     }
 #endif
     scm_onboard_autogen_internal();
+    gCommissionableDataFsConfigValid = scm_demo_spake2p_config_check();
     return CHIP_NO_ERROR;
 }
 
@@ -476,7 +478,7 @@ CHIP_ERROR FactoryDataProvider::GetSetupDiscriminator(uint16_t & setupDiscrimina
 #else
     uint32_t val;
 
-    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check())
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
     {
         val = CHIP_DEVICE_CONFIG_USE_TEST_SETUP_DISCRIMINATOR;
     }
@@ -513,14 +515,14 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pIterationCount(uint32_t & iterationCou
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check()) 
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
     {
         iterationCount = CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_ITERATION_COUNT;
     }
     else
     {
         ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValue(SCMDemoConfig::kConfigKey_Spake2pIterationCount, iterationCount));
-	}
+    }
 
     return CHIP_NO_ERROR;
 #endif
@@ -549,7 +551,7 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pSalt(MutableByteSpan & saltBuf)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check()) 
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
     {
         saltB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT);
         ReturnErrorCodeIf(saltB64Len > sizeof(saltB64), CHIP_ERROR_BUFFER_TOO_SMALL);
@@ -597,11 +599,11 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pVerifier(MutableByteSpan & verifierBuf
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check()) 
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
     {
-        verifierLen = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER);
-        ReturnErrorCodeIf(verifierLen > sizeof(verifierB64), CHIP_ERROR_BUFFER_TOO_SMALL);
-        memcpy(verifierB64, CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER, verifierLen);
+        verifierB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER);
+        ReturnErrorCodeIf(verifierB64Len > sizeof(verifierB64), CHIP_ERROR_BUFFER_TOO_SMALL);
+        memcpy(verifierB64, CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER, verifierB64Len);
     }
     else
     {
@@ -638,7 +640,7 @@ CHIP_ERROR FactoryDataProvider::GetSetupPasscode(uint32_t & setupPasscode)
 #else
     uint32_t val;
 
-    if (!SCM_FACTORY_CONFIG_VALID && !scm_demo_spake2p_config_check())
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
     {
         val = CHIP_DEVICE_CONFIG_USE_TEST_SETUP_PIN_CODE;
     }

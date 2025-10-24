@@ -370,8 +370,6 @@ CHIP_ERROR AppTask::Init()
     // Init ZCL Data Model and start server
     static chip::CommonCaseDeviceServerInitParams initParams;
     (void) initParams.InitializeStaticResourcesBeforeServerInit();
-    //! verifier 在server初始化 PASE 参数时就会调用 FactoryData来设置 verifier值
-    //! AdvertiseAndListenForPASE 中 调用默认值
     chip::Server::GetInstance().Init(initParams);
 
     PlatformMgr().UnlockChipStack();
