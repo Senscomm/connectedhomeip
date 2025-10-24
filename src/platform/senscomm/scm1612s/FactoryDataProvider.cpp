@@ -32,7 +32,7 @@
 #include "ConfigurationManagerImpl.h"
 
 #define SCM_HASH_LEN            32  /* HMAC SHA256 output length */
-// we can use our own values, but now use default
+/* we can use our own values, but now use default */
 #define SCM_SPAKE2P_ITERATIONS  1000
 #define SCM_SPAKE2P_SALT        "U1BBS0UyUCBLZXkgU2FsdA=="
 
@@ -40,7 +40,7 @@
 #define SCM_HASH_PASSCODE_OFF   0
 #define SCM_HASH_DISCR_OFF      (SCM_HASH_PASSCODE_OFF + SCM_HASH_PASSCODE_LEN)
 
-// Control the CommissionableData source
+/* Control the CommissionableData source */
 bool gCommissionableDataFsConfigValid = false;
 bool gCommissionableDataUseDefault = false;
 
@@ -166,15 +166,15 @@ uint8_t scm_onboard_autogen_internal()
     chip::DeviceLayer::ConfigurationMgrImpl().GetPrimaryWiFiMACAddress(wlan_mac);
     GenerateMacHash(wlan_mac, hash);
 
-    //! 2bytes - 12-bit value for discr
+    /* 2bytes - 12-bit value for discr */
     discr = (((uint16_t)hash[SCM_HASH_DISCR_OFF] << 8) | hash[SCM_HASH_DISCR_OFF + 1]) & 0xfff;
     scm_matter_config_u32_update(SCMDemoConfig::kConfigKey_SetupDiscriminator, static_cast<uint32_t>(discr), 1);
 
-    //! 4 bytes for passcode
+    /* 4 bytes for passcode */
     passcode = scm_passcode_from_hash(hash);
     scm_matter_config_u32_update(SCMDemoConfig::kConfigKey_SetupPinCode, passcode, 1);
 
-    //! use default iteration & salt value
+    /* use default iteration & salt value */
     verifier.Generate(iteration_cnt, ByteSpan(salt, salt_len), passcode);
 
     chip_err = verifier.Serialize(verifier_span);
