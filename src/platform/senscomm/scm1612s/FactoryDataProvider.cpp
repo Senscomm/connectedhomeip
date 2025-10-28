@@ -26,7 +26,25 @@
 #include <matter_factory_data.h>
 #endif
 
+#include <setup_payload/SetupPayload.h>
+
 #include "FactoryDataProvider.h"
+#include "ConfigurationManagerImpl.h"
+
+#define SCM_HASH_LEN            32  /* HMAC SHA256 output length */
+/* we can use our own values, but now use default */
+#define SCM_SPAKE2P_ITERATIONS  1000
+#define SCM_SPAKE2P_SALT        "U1BBS0UyUCBLZXkgU2FsdA=="
+
+#define SCM_HASH_PASSCODE_LEN   4 /* 32 bits mod'd to 8 decimal digits */
+#define SCM_HASH_PASSCODE_OFF   0
+#define SCM_HASH_DISCR_OFF      (SCM_HASH_PASSCODE_OFF + SCM_HASH_PASSCODE_LEN)
+
+/* Control the CommissionableData source */
+bool gCommissionableDataFsConfigValid = false;
+bool gCommissionableDataUseDefault = false;
+
+using SCMDemoConfig = chip::DeviceLayer::Internal::SCM1612SConfig;
 
 using namespace chip::app::Clusters::BasicInformation;
 
@@ -42,6 +60,138 @@ CHIP_ERROR LoadKeypairFromRaw(ByteSpan privateKey, ByteSpan publicKey, Crypto::P
     return keypair.Deserialize(serializedKeypair);
 }
 
+CHIP_ERROR GenerateMacHash(const uint8_t mac[6], uint8_t hash[SCM_HASH_LEN])
+{
+    ReturnErrorOnFailure(chip::Crypto::Hash_SHA256(mac, 6, hash));
+    return CHIP_NO_ERROR;
+}
+
+static int scm_demo_spake2p_config_check()
+{
+    int rc = 1;
+
+    if (!SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_SetupDiscriminator) || 
+        !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_SetupPinCode)|| 
+        !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pIterationCount) ||
+        !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pSalt) || 
+        !SCMDemoConfig::ConfigValueExists(SCMDemoConfig::kConfigKey_Spake2pVerifier)) {
+        rc = 0;
+    }
+
+    return rc;
+}
+
+static uint32_t scm_passcode_from_hash(const uint8_t *hash)
+{
+    uint32_t passcode = (((uint32_t)(hash[SCM_HASH_PASSCODE_OFF] << 24) |
+                        (hash[SCM_HASH_PASSCODE_OFF+1] << 16) |
+                        (hash[SCM_HASH_PASSCODE_OFF+2] << 8) |
+                        hash[SCM_HASH_PASSCODE_OFF+3])) % kSetupPINCodeMaximumValue + 1;
+
+    while (!chip::PayloadContents::IsValidSetupPIN(passcode)) {
+        passcode = (passcode + 1) % kSetupPINCodeMaximumValue;
+    }
+
+    return passcode;
+}
+
+static int scm_matter_config_u32_update(SCMDemoConfig::Key key, uint32_t value, uint8_t overwrite)
+{
+    CHIP_ERROR chip_err;
+    uint32_t curr_value;
+
+    if (!overwrite && SCMDemoConfig::ConfigValueExists(key)) {
+        return 0;
+    }
+
+    chip_err = SCMDemoConfig::ReadConfigValue(key, curr_value);
+    if (chip_err == CHIP_NO_ERROR && value == curr_value) {
+        return 0;
+    }
+
+    if (SCMDemoConfig::WriteConfigValue(key, value) != CHIP_NO_ERROR) {
+        return 1;
+    }
+
+    return 0;
+}
+
+static int scm_matter_config_str_update(SCMDemoConfig::Key key, const char *str, uint8_t overwrite)
+{
+    CHIP_ERROR chip_err;
+    char buf[100];
+    size_t len = sizeof(buf) - 1;
+
+    if (!overwrite && SCMDemoConfig::ConfigValueExists(key)) {
+        return 0;
+    }
+
+    buf[len] = '\0';
+
+    chip_err = SCMDemoConfig::ReadConfigValueStr(key, buf, len, len);
+    if (chip_err == CHIP_NO_ERROR && !strcmp(str, buf)) {
+        return 0;
+    }
+
+    if (SCMDemoConfig::WriteConfigValueStr(key, str) != CHIP_NO_ERROR) {
+        return -1;
+    }
+
+    return 0;
+}
+
+uint8_t scm_onboard_autogen_internal()
+{
+    uint8_t err;
+    CHIP_ERROR chip_err;
+
+    uint8_t hash[SCM_HASH_LEN];
+    uint16_t discr;
+    uint32_t passcode;
+
+    uint8_t salt[chip::Crypto::kSpake2p_Max_PBKDF_Salt_Length];
+    uint8_t salt_len = 0;
+    uint32_t iteration_cnt = SCM_SPAKE2P_ITERATIONS;
+
+    salt_len = static_cast<uint8_t>(chip::Base64Decode32(SCM_SPAKE2P_SALT, static_cast<uint32_t>(strlen(SCM_SPAKE2P_SALT)), salt));
+
+    chip::Crypto::Spake2pVerifier verifier;
+    chip::Crypto::Spake2pVerifierSerialized serialized_verifier;
+    chip::MutableByteSpan verifier_span(serialized_verifier);
+
+    char verifier_b64[BASE64_ENCODED_LEN(chip::Crypto::kSpake2p_VerifierSerialized_Length) + 1];
+    uint32_t verifier_b64_len = 0;
+
+    uint8_t wlan_mac[6];
+    chip::DeviceLayer::ConfigurationMgrImpl().GetPrimaryWiFiMACAddress(wlan_mac);
+    GenerateMacHash(wlan_mac, hash);
+
+    /* 2bytes - 12-bit value for discr */
+    discr = (((uint16_t)hash[SCM_HASH_DISCR_OFF] << 8) | hash[SCM_HASH_DISCR_OFF + 1]) & 0xfff;
+    scm_matter_config_u32_update(SCMDemoConfig::kConfigKey_SetupDiscriminator, static_cast<uint32_t>(discr), 1);
+
+    /* 4 bytes for passcode */
+    passcode = scm_passcode_from_hash(hash);
+    scm_matter_config_u32_update(SCMDemoConfig::kConfigKey_SetupPinCode, passcode, 1);
+
+    /* use default iteration & salt value */
+    verifier.Generate(iteration_cnt, ByteSpan(salt, salt_len), passcode);
+
+    chip_err = verifier.Serialize(verifier_span);
+    if (chip_err != CHIP_NO_ERROR) {
+        return 1;
+    }
+
+    verifier_b64_len = chip::Base64Encode32(serialized_verifier, chip::Crypto::kSpake2p_VerifierSerialized_Length, verifier_b64);
+    verifier_b64[verifier_b64_len] = '\0';
+
+    scm_matter_config_u32_update(SCMDemoConfig::kConfigKey_Spake2pIterationCount, iteration_cnt, 1);
+    scm_matter_config_str_update(SCMDemoConfig::kConfigKey_Spake2pSalt,SCM_SPAKE2P_SALT, 1);
+    scm_matter_config_str_update(SCMDemoConfig::kConfigKey_Spake2pVerifier,verifier_b64, 1);
+
+    return 0;
+}
+
 CHIP_ERROR FactoryDataProvider::Init()
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
@@ -50,6 +200,8 @@ CHIP_ERROR FactoryDataProvider::Init()
         return CHIP_ERROR_PERSISTED_STORAGE_FAILED;
     }
 #endif
+    scm_onboard_autogen_internal();
+    gCommissionableDataFsConfigValid = scm_demo_spake2p_config_check();
     return CHIP_NO_ERROR;
 }
 
@@ -321,8 +473,22 @@ CHIP_ERROR FactoryDataProvider::GetSetupDiscriminator(uint16_t & setupDiscrimina
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
+#if 0
     setupDiscriminator = 3840;
+#else
+    uint32_t val;
 
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
+    {
+        val = CHIP_DEVICE_CONFIG_USE_TEST_SETUP_DISCRIMINATOR;
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValue(SCMDemoConfig::kConfigKey_SetupDiscriminator, val));
+    }
+
+    setupDiscriminator = static_cast<uint16_t>(val);
+#endif
     return CHIP_NO_ERROR;
 #endif
 }
@@ -349,7 +515,14 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pIterationCount(uint32_t & iterationCou
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    iterationCount = 1000;
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
+    {
+        iterationCount = CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_ITERATION_COUNT;
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValue(SCMDemoConfig::kConfigKey_Spake2pIterationCount, iterationCount));
+    }
 
     return CHIP_NO_ERROR;
 #endif
@@ -378,6 +551,18 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pSalt(MutableByteSpan & saltBuf)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
+    {
+        saltB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT);
+        ReturnErrorCodeIf(saltB64Len > sizeof(saltB64), CHIP_ERROR_BUFFER_TOO_SMALL);
+        memcpy(saltB64, CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT, saltB64Len);
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValueStr(SCMDemoConfig::kConfigKey_Spake2pSalt, 
+            saltB64, sizeof(saltB64), saltB64Len));
+	}
+
     size_t saltLen = chip::Base64Decode32(saltB64, saltB64Len, reinterpret_cast<uint8_t *>(saltB64));
 
     ReturnErrorCodeIf(saltLen > saltBuf.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
@@ -414,6 +599,19 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pVerifier(MutableByteSpan & verifierBuf
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
+    {
+        verifierB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER);
+        ReturnErrorCodeIf(verifierB64Len > sizeof(verifierB64), CHIP_ERROR_BUFFER_TOO_SMALL);
+        memcpy(verifierB64, CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER, verifierB64Len);
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValueStr(
+            SCMDemoConfig::kConfigKey_Spake2pVerifier, 
+            verifierB64, sizeof(verifierB64), verifierB64Len));
+	}
+
     verifierLen = chip::Base64Decode32(verifierB64, verifierB64Len, reinterpret_cast<uint8_t *>(verifierB64));
     ReturnErrorCodeIf(verifierLen > verifierBuf.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
     memcpy(verifierBuf.data(), verifierB64, verifierLen);
@@ -440,7 +638,19 @@ CHIP_ERROR FactoryDataProvider::GetSetupPasscode(uint32_t & setupPasscode)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    setupPasscode = 20202021;
+    uint32_t val;
+
+    if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
+    {
+        val = CHIP_DEVICE_CONFIG_USE_TEST_SETUP_PIN_CODE;
+    }
+    else
+    {
+        ReturnErrorOnFailure(SCMDemoConfig::ReadConfigValue(SCMDemoConfig::kConfigKey_SetupPinCode, val));
+    }
+
+    setupPasscode = static_cast<uint32_t>(val);
+
     return CHIP_NO_ERROR;
 #endif
 }

@@ -352,11 +352,6 @@ CHIP_ERROR AppTask::Init()
         },
         0);
 
-    // Init ZCL Data Model and start server
-    static chip::CommonCaseDeviceServerInitParams initParams;
-    (void) initParams.InitializeStaticResourcesBeforeServerInit();
-    chip::Server::GetInstance().Init(initParams);
-
 #if CHIP_BUILD_EXAMPLE_CREDS
     // Initialize device attestation config
     SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
@@ -371,6 +366,12 @@ CHIP_ERROR AppTask::Init()
     SetDeviceAttestationCredentialsProvider(&mFactoryDataProvider);
     SetDeviceInstanceInfoProvider(&mFactoryDataProvider);
 #endif
+
+    // Init ZCL Data Model and start server
+    static chip::CommonCaseDeviceServerInitParams initParams;
+    (void) initParams.InitializeStaticResourcesBeforeServerInit();
+    chip::Server::GetInstance().Init(initParams);
+
     PlatformMgr().UnlockChipStack();
 
     // Create FreeRTOS sw timer for Function Selection.
