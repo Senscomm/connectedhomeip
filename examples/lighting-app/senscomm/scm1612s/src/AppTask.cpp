@@ -119,11 +119,36 @@ chip::DeviceLayer::FactoryDataProvider mFactoryDataProvider;
 #endif
 } // namespace
 
+using namespace ::chip;
 using namespace chip::TLV;
+using namespace ::chip::app;
 using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
 
 AppTask AppTask::sAppTask;
+
+/* For Formal Matter Certification TC-I-2.3 EP2 (OnOff Plug-in Unit) */
+#define ONFOFF_PLUGIN_UNIT_ENDPOINT 2
+
+::Identify sIdentify = { ONFOFF_PLUGIN_UNIT_ENDPOINT, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
+            Clusters::Identify::IdentifyTypeEnum::kVisibleIndicator, AppTask::TriggerIdentifyEffectHandler };
+
+void AppTask::IdentifyStartHandler(Identify * identify)
+{
+    ChipLogProgress(AppServer, "IdentifyStartHandler called!");
+}
+
+void AppTask::IdentifyStopHandler(Identify * identify)
+{
+    ChipLogProgress(AppServer, "IdentifyStopHandler called!");
+}
+
+/* TODO: The underlying functions maby need to be truly realized. */
+/* The function exists but can perform no actual operations. The upper layer will return "success" after call it. */
+void AppTask::TriggerIdentifyEffectHandler(Identify * identify)
+{
+    ChipLogProgress(AppServer, "Received TriggerEffect!");
+}
 
 #ifdef ENABLE_CHIP_SHELL
 
