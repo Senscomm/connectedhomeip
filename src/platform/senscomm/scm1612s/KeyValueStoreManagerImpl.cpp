@@ -90,11 +90,9 @@ CHIP_ERROR KeyValueStoreManagerImpl::_Delete(const char * key)
     return CHIP_NO_ERROR;
 }
 
-#define CONFIG_DIR "/config"
-
 CHIP_ERROR KeyValueStoreManagerImpl::ErasePartition()
 {
-    int ret = scm_fs_format(CONFIG_DIR);
+    int ret = scm_fs_clear_all_config_value(kNamespace);
     if (ret < 0)
         return CHIP_ERROR_INTERNAL;
 
