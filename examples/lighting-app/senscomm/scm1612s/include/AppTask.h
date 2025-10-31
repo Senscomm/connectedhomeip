@@ -40,6 +40,8 @@
 #define APP_ERROR_START_TIMER_FAILED CHIP_APPLICATION_ERROR(0x05)
 #define APP_ERROR_STOP_TIMER_FAILED CHIP_APPLICATION_ERROR(0x06)
 
+struct Identify;
+
 class AppTask
 {
 
@@ -54,6 +56,10 @@ public:
     void ButtonHandler(const filogic_button_t & button);
 #endif /* __no_stub__ */
     void OccupancyHandler(bool present);
+
+    static void IdentifyStartHandler(::Identify *);
+    static void IdentifyStopHandler(::Identify *);
+    static void TriggerIdentifyEffectHandler(::Identify * identify);
 
 private:
     friend AppTask & GetAppTask(void);
