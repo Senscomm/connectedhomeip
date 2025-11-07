@@ -22,13 +22,13 @@
 
 #include <platform/CHIPDeviceConfig.h>
 
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-#include <matter_factory_data.h>
-#endif
-
-#include <setup_payload/SetupPayload.h>
-
 #include "FactoryDataProvider.h"
+
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#include <scm_flash.h>
+#include <stddef.h>
+#else
+#include <setup_payload/SetupPayload.h>
 #include "ConfigurationManagerImpl.h"
 
 #define SCM_HASH_LEN            32  /* HMAC SHA256 output length */
@@ -45,6 +45,7 @@ bool gCommissionableDataFsConfigValid = false;
 bool gCommissionableDataUseDefault = false;
 
 using SCMDemoConfig = chip::DeviceLayer::Internal::SCM1612SConfig;
+#endif
 
 using namespace chip::app::Clusters::BasicInformation;
 
@@ -60,6 +61,40 @@ CHIP_ERROR LoadKeypairFromRaw(ByteSpan privateKey, ByteSpan publicKey, Crypto::P
     return keypair.Deserialize(serializedKeypair);
 }
 
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#define SCM_FACTORY_DATA_OFFSET_HDR             (0x0400)
+#define DAC_PRIVATE_KEY_USEAGE_SZIE             (32)
+
+struct factoryDataMatterLayout
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t oemType;
+    uint16_t cdLen;
+    uint16_t dacLen;
+    uint16_t paiLen;
+    uint8_t discLen;
+    uint8_t iterCntLen;
+    uint8_t saltLen;
+    uint8_t verifierLen;
+    uint8_t passcodeLen;
+    uint8_t reserved[47];
+
+    uint8_t cd[Credentials::kMaxCHIPCertLength];
+    uint8_t dac[Credentials::kMaxDERCertLength];
+    uint8_t pai[Credentials::kMaxDERCertLength];
+    uint8_t dacPrivKey[DAC_PRIVATE_KEY_USEAGE_SZIE];
+    uint8_t dacPrivKeyReserved[64 - DAC_PRIVATE_KEY_USEAGE_SZIE];
+
+    uint16_t pid;
+    uint16_t vid;
+    uint16_t disc;
+    uint32_t iterCnt;
+    uint8_t salt[32];
+    uint8_t verifier[97];
+    uint32_t passcode;
+} __packed;
+#else
 CHIP_ERROR GenerateMacHash(const uint8_t mac[6], uint8_t hash[SCM_HASH_LEN])
 {
     ReturnErrorOnFailure(chip::Crypto::Hash_SHA256(mac, 6, hash));
@@ -191,39 +226,45 @@ uint8_t scm_onboard_autogen_internal()
 
     return 0;
 }
+#endif
 
 CHIP_ERROR FactoryDataProvider::Init()
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    if (false == mfd_init())
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_FAILED;
-    }
-#endif
+    int ret;
+    off_t offset;
+    uint8_t magic[4];
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR;
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, magic, sizeof(magic));
+
+    ChipLogProgress(DeviceLayer, "Factory Data Magic Value %c%c%c%c", magic[3], magic[2], magic[1], magic[0]);
+#else
     scm_onboard_autogen_internal();
     gCommissionableDataFsConfigValid = scm_demo_spake2p_config_check();
+#endif
     return CHIP_NO_ERROR;
 }
 
 CHIP_ERROR FactoryDataProvider::GetCertificationDeclaration(MutableByteSpan & outBuffer)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    uint16_t cdRealLen;
+    off_t offset;
 
-    len = mfd_getCd(outBuffer.data(), outBuffer.size());
-    if (len > 0)
-    {
-        outBuffer.reduce_size(len);
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, cdLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)(&cdRealLen), sizeof(cdRealLen));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    ReturnErrorCodeIf(outBuffer.size() < cdRealLen, CHIP_ERROR_BUFFER_TOO_SMALL);
 
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, cd);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, outBuffer.data(), outBuffer.size());
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    outBuffer.reduce_size(cdRealLen);
+    return CHIP_NO_ERROR;
 #else
-
     static const unsigned char kCdForAllExamples[] = {
         0x30, 0x81, 0xea, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01,
         0x07, 0x02, 0xa0, 0x81, 0xdc, 0x30, 0x81, 0xd9, 0x02, 0x01, 0x03, 0x31,
@@ -263,20 +304,21 @@ CHIP_ERROR FactoryDataProvider::GetFirmwareInformation(MutableByteSpan & out_fir
 CHIP_ERROR FactoryDataProvider::GetDeviceAttestationCert(MutableByteSpan & outBuffer)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    uint16_t dacRealLen;
+    off_t offset;
 
-    len = mfd_getDacCert(outBuffer.data(), outBuffer.size());
-    if (len > 0)
-    {
-        outBuffer.reduce_size(len);
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, dacLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)(&dacRealLen), sizeof(dacRealLen));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    ReturnErrorCodeIf(outBuffer.size() < dacRealLen, CHIP_ERROR_BUFFER_TOO_SMALL);
 
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, dac);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, outBuffer.data(), outBuffer.size());
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    outBuffer.reduce_size(dacRealLen);
+    return CHIP_NO_ERROR;
 #else
     static const uint8_t Dac_Cert_Array[] = {
         0x30, 0x82, 0x02, 0x16, 0x30, 0x82, 0x01, 0xbb, 0xa0, 0x03, 0x02, 0x01,
@@ -335,20 +377,21 @@ CHIP_ERROR FactoryDataProvider::GetDeviceAttestationCert(MutableByteSpan & outBu
 CHIP_ERROR FactoryDataProvider::GetProductAttestationIntermediateCert(MutableByteSpan & outBuffer)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    uint16_t paiRealLen;
+    off_t offset;
 
-    len = mfd_getPaiCert(outBuffer.data(), outBuffer.size());
-    if (len > 0)
-    {
-        outBuffer.reduce_size(len);
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, paiLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)(&paiRealLen), sizeof(paiRealLen));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    ReturnErrorCodeIf(outBuffer.size() < paiRealLen, CHIP_ERROR_BUFFER_TOO_SMALL);
 
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, pai);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, outBuffer.data(), outBuffer.size());
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    outBuffer.reduce_size(paiRealLen);
+    return CHIP_NO_ERROR;
 #else
     static const uint8_t Pai_Cert_Array[] = {
         0x30, 0x82, 0x02, 0x0e, 0x30, 0x82, 0x01, 0xb4, 0xa0, 0x03, 0x02, 0x01,
@@ -416,20 +459,21 @@ CHIP_ERROR FactoryDataProvider::SignWithDeviceAttestationKey(const ByteSpan & me
     }
 
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    uint8_t dacCertArray[Credentials::kMaxDERCertLength];
+    uint8_t dacCertPrivateKeyArray[DAC_PRIVATE_KEY_USEAGE_SZIE];
+    MutableByteSpan dacCert(dacCertArray, Credentials::kMaxDERCertLength);
+    MutableByteSpan dacPrivateKey(dacCertPrivateKeyArray, sizeof(dacCertPrivateKeyArray));
 
-    uint32_t dacCertSize = 0, dacPrivateKeySize = 0;
-    uint8_t * pDacCertPtr       = mfd_getDacCertPtr(&dacCertSize);
-    uint8_t * pDacPrivateKeyPtr = mfd_getDacPrivateKeyPtr(&dacPrivateKeySize);
+    int ret;
+    off_t offset;
 
-    if (NULL == pDacCertPtr || 0 == dacCertSize || NULL == pDacPrivateKeyPtr || 0 == dacPrivateKeySize)
-    {
-        outSignBuffer.reduce_size(0);
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, dacPrivKey);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, dacPrivateKey.data(), sizeof(dacCertPrivateKeyArray));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
 
-    ByteSpan dacCert(pDacCertPtr, dacCertSize);
-    ByteSpan dacPrivateKey(pDacPrivateKeyPtr, dacPrivateKeySize);
-
+    ReturnErrorOnFailure(GetDeviceAttestationCert(dacCert));
+    ReturnErrorOnFailure(chip::Crypto::ExtractPubkeyFromX509Cert(dacCert, dacPublicKey));
+    ReturnErrorOnFailure(LoadKeypairFromRaw(dacPrivateKey, ByteSpan(dacPublicKey.Bytes(), dacPublicKey.Length()), keypair));
 #else
     static const uint8_t Dac_PrivateKey_Array[] = { 0x03, 0xff, 0x59, 0xb9, 0x11, 0xdf, 0xe6, 0xc9, 0x7b, 0x17, 0x29, 0x71,
                                                     0x17, 0x40, 0xec, 0x00, 0x36, 0x39, 0xd9, 0x06, 0xdd, 0xe5, 0x6b, 0x6e,
@@ -443,11 +487,10 @@ CHIP_ERROR FactoryDataProvider::SignWithDeviceAttestationKey(const ByteSpan & me
     ReturnErrorOnFailure(CopySpanToMutableSpan(ByteSpan(Dac_PrivateKey_Array), dacPrivateKey));
     ReturnErrorOnFailure(GetDeviceAttestationCert(dacCert));
 
-#endif
-
     ReturnErrorOnFailure(chip::Crypto::ExtractPubkeyFromX509Cert(dacCert, dacPublicKey));
 
     ReturnErrorOnFailure(LoadKeypairFromRaw(dacPrivateKey, ByteSpan(dacPublicKey.Bytes(), dacPublicKey.Length()), keypair));
+#endif
     ReturnErrorOnFailure(keypair.ECDSA_sign_msg(messageToSign.data(), messageToSign.size(), signature));
 
     ReturnErrorOnFailure(CopySpanToMutableSpan(ByteSpan(signature.Bytes(), signature.Length()), outSignBuffer));
@@ -458,23 +501,14 @@ CHIP_ERROR FactoryDataProvider::SignWithDeviceAttestationKey(const ByteSpan & me
 CHIP_ERROR FactoryDataProvider::GetSetupDiscriminator(uint16_t & setupDiscriminator)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    off_t offset;
 
-    len = mfd_getDiscriminator((uint8_t *) &setupDiscriminator, sizeof(setupDiscriminator));
-    if (len > 0)
-    {
-        setupDiscriminator = 0xfff & setupDiscriminator;
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
-#else
-#if 0
-    setupDiscriminator = 3840;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, disc);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)&setupDiscriminator, sizeof(setupDiscriminator));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    setupDiscriminator = 0xfff & setupDiscriminator;
+    return CHIP_NO_ERROR;
 #else
     uint32_t val;
 
@@ -488,7 +522,6 @@ CHIP_ERROR FactoryDataProvider::GetSetupDiscriminator(uint16_t & setupDiscrimina
     }
 
     setupDiscriminator = static_cast<uint16_t>(val);
-#endif
     return CHIP_NO_ERROR;
 #endif
 }
@@ -501,19 +534,13 @@ CHIP_ERROR FactoryDataProvider::SetSetupDiscriminator(uint16_t setupDiscriminato
 CHIP_ERROR FactoryDataProvider::GetSpake2pIterationCount(uint32_t & iterationCount)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    off_t offset;
 
-    len = mfd_getSapke2It((uint8_t *) &iterationCount, sizeof(iterationCount));
-    if (len > 0)
-    {
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, iterCnt);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)&iterationCount, sizeof(iterationCount));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    return CHIP_NO_ERROR;
 #else
     if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid)
     {
@@ -530,27 +557,28 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pIterationCount(uint32_t & iterationCou
 
 CHIP_ERROR FactoryDataProvider::GetSpake2pSalt(MutableByteSpan & saltBuf)
 {
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    int ret;
+    uint8_t saltLen;
+    off_t offset;
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, saltLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)(&saltLen), sizeof(saltLen));
+    ReturnErrorCodeIf(saltLen > saltBuf.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, salt);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, saltBuf.data(), saltBuf.size());
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    saltBuf.reduce_size(saltLen);
+    return CHIP_NO_ERROR;
+#else
     static constexpr size_t kSpake2pSalt_MaxBase64Len = BASE64_ENCODED_LEN(chip::Crypto::kSpake2p_Max_PBKDF_Salt_Length) + 1;
 
     CHIP_ERROR err                          = CHIP_ERROR_NOT_FOUND;
     char saltB64[kSpake2pSalt_MaxBase64Len] = { 0 };
     size_t saltB64Len                       = 0;
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
 
-    len = mfd_getSapke2Salt(saltBuf.data(), saltBuf.size());
-    if (len > 0)
-    {
-        saltBuf.reduce_size(len);
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
-#else
     if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
     {
         saltB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_SALT);
@@ -575,6 +603,23 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pSalt(MutableByteSpan & saltBuf)
 
 CHIP_ERROR FactoryDataProvider::GetSpake2pVerifier(MutableByteSpan & verifierBuf, size_t & verifierLen)
 {
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    int ret;
+    uint8_t verifierRealLen;
+    off_t offset;
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, verifierLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)(&verifierRealLen), sizeof(verifierRealLen));
+    verifierLen = verifierRealLen;
+    ReturnErrorCodeIf(verifierLen > verifierBuf.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, verifier);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, verifierBuf.data(), verifierBuf.size());
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    verifierBuf.reduce_size(verifierLen);
+    return CHIP_NO_ERROR;
+#else
     static constexpr size_t kSpake2pSerializedVerifier_MaxBase64Len =
         BASE64_ENCODED_LEN(chip::Crypto::kSpake2p_VerifierSerialized_Length) + 1;
 
@@ -582,23 +627,6 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pVerifier(MutableByteSpan & verifierBuf
     char verifierB64[kSpake2pSerializedVerifier_MaxBase64Len] = { 0 };
     size_t verifierB64Len                                     = 0;
 
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
-
-    len = mfd_getSapke2Verifier(verifierBuf.data(), verifierBuf.size());
-    if (len > 0)
-    {
-        verifierLen = len;
-        verifierBuf.reduce_size(len);
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
-#else
     if (gCommissionableDataUseDefault || !gCommissionableDataFsConfigValid) 
     {
         verifierB64Len = strlen(CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER);
@@ -624,19 +652,13 @@ CHIP_ERROR FactoryDataProvider::GetSpake2pVerifier(MutableByteSpan & verifierBuf
 CHIP_ERROR FactoryDataProvider::GetSetupPasscode(uint32_t & setupPasscode)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    off_t offset;
 
-    len = mfd_getPasscode((uint8_t *) &setupPasscode, sizeof(setupPasscode));
-    if (len > 0)
-    {
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, passcode);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)&setupPasscode, sizeof(setupPasscode));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    return CHIP_NO_ERROR;
 #else
     uint32_t val;
 
@@ -662,7 +684,7 @@ CHIP_ERROR FactoryDataProvider::SetSetupPasscode(uint32_t setupPasscode)
 
 CHIP_ERROR FactoryDataProvider::GetVendorName(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getVendorName(buf, bufSize);
@@ -688,19 +710,13 @@ CHIP_ERROR FactoryDataProvider::GetVendorName(char * buf, size_t bufSize)
 CHIP_ERROR FactoryDataProvider::GetVendorId(uint16_t & vendorId)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    off_t offset;
 
-    len = mfd_getVendorId((uint8_t *) &vendorId, sizeof(vendorId));
-    if (len > 0)
-    {
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, vid);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)&vendorId, sizeof(vendorId));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    return CHIP_NO_ERROR;
 #else
     vendorId = 0x15FE;
     return CHIP_NO_ERROR;
@@ -709,7 +725,7 @@ CHIP_ERROR FactoryDataProvider::GetVendorId(uint16_t & vendorId)
 
 CHIP_ERROR FactoryDataProvider::GetProductName(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getProductName(buf, bufSize);
@@ -735,19 +751,13 @@ CHIP_ERROR FactoryDataProvider::GetProductName(char * buf, size_t bufSize)
 CHIP_ERROR FactoryDataProvider::GetProductId(uint16_t & productId)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    int len = 0;
+    int ret;
+    off_t offset;
 
-    len = mfd_getProductId((uint8_t *) &productId, sizeof(productId));
-    if (len > 0)
-    {
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, pid);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, (uint8_t *)&productId, sizeof(productId));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    return CHIP_NO_ERROR;
 #else
     productId = 0x1612;
 
@@ -757,7 +767,7 @@ CHIP_ERROR FactoryDataProvider::GetProductId(uint16_t & productId)
 
 CHIP_ERROR FactoryDataProvider::GetPartNumber(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getPartNumber(buf, bufSize);
@@ -779,7 +789,7 @@ CHIP_ERROR FactoryDataProvider::GetPartNumber(char * buf, size_t bufSize)
 
 CHIP_ERROR FactoryDataProvider::GetProductURL(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getProductUrl(buf, bufSize);
@@ -801,7 +811,7 @@ CHIP_ERROR FactoryDataProvider::GetProductURL(char * buf, size_t bufSize)
 
 CHIP_ERROR FactoryDataProvider::GetProductLabel(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getProductLabel(buf, bufSize);
@@ -823,7 +833,7 @@ CHIP_ERROR FactoryDataProvider::GetProductLabel(char * buf, size_t bufSize)
 
 CHIP_ERROR FactoryDataProvider::GetSerialNumber(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getSerialNumber(buf, bufSize);
@@ -865,7 +875,7 @@ CHIP_ERROR FactoryDataProvider::GetManufacturingDate(uint16_t & year, uint8_t & 
 
 #define OS_DAY ((__DATE__[4] == ' ' ? 0 : __DATE__[4] - '0') * 10 + (__DATE__[5] - '0'))
 
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     if (mfd_getManufacturingDate(&year, &month, &day))
     {
         return CHIP_NO_ERROR;
@@ -881,7 +891,7 @@ CHIP_ERROR FactoryDataProvider::GetManufacturingDate(uint16_t & year, uint8_t & 
 
 CHIP_ERROR FactoryDataProvider::GetHardwareVersion(uint16_t & hardwareVersion)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getHardwareVersion((uint8_t *) &hardwareVersion, sizeof(hardwareVersion));
@@ -904,7 +914,7 @@ CHIP_ERROR FactoryDataProvider::GetHardwareVersion(uint16_t & hardwareVersion)
 
 CHIP_ERROR FactoryDataProvider::GetHardwareVersionString(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
     len     = mfd_getHardwareVersionString(buf, bufSize);
     if (len > 0)
@@ -927,7 +937,7 @@ CHIP_ERROR FactoryDataProvider::GetHardwareVersionString(char * buf, size_t bufS
 
 CHIP_ERROR FactoryDataProvider::GetRotatingDeviceIdUniqueId(MutableByteSpan & uniqueIdSpan)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
     len = mfd_getRotatingDeviceIdUniqueId(uniqueIdSpan.data(), uniqueIdSpan.size());
