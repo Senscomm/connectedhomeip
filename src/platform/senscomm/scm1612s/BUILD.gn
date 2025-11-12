@@ -102,5 +102,6 @@ static_library("scm1612s") {
 
   defines = [
     "CHIP_BUILD_EXAMPLE_CREDS=$chip_build_example_creds",
+    "CONFIG_SENSCOMM_FACTORY_DATA_ENABLE=!$chip_build_example_creds"
   ]
 }
