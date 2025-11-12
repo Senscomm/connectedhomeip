@@ -129,8 +129,13 @@ AppTask AppTask::sAppTask;
 
 /* For Formal Matter Certification TC-I-2.3 EP2 (OnOff Plug-in Unit) */
 #define ONFOFF_PLUGIN_UNIT_ENDPOINT 2
+/* For Formal Matter Certification TC-I-2.3 EP1 (Extended Color Light) */
+#define EXTENDED_COLOR_LIGHT_ENDPOINT 1
 
-::Identify sIdentify = { ONFOFF_PLUGIN_UNIT_ENDPOINT, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
+::Identify sIdentify1 = { EXTENDED_COLOR_LIGHT_ENDPOINT, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
+            Clusters::Identify::IdentifyTypeEnum::kVisibleIndicator, AppTask::TriggerIdentifyEffectHandler };
+
+::Identify sIdentify2 = { ONFOFF_PLUGIN_UNIT_ENDPOINT, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
             Clusters::Identify::IdentifyTypeEnum::kVisibleIndicator, AppTask::TriggerIdentifyEffectHandler };
 
 void AppTask::IdentifyStartHandler(Identify * identify)
