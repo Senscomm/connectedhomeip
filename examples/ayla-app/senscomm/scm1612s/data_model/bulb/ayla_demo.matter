@@ -1818,6 +1818,7 @@ endpoint 0 {
     handle command KeySetReadAllIndices;
     handle command KeySetReadAllIndicesResponse;
   }
+
 }
 endpoint 1 {
   device type ma_extendedcolorlight = 269, version 4;
@@ -1918,15 +1919,17 @@ endpoint 1 {
   }
 
   server cluster ColorControl {
+    ram      attribute currentHue default = 0x00;
+    ram      attribute currentSaturation default = 0x00;
     ram      attribute remainingTime default = 0x0000;
     ram      attribute currentX default = 0x616B;
     ram      attribute currentY default = 0x607D;
     persist  attribute colorTemperatureMireds default = 0x00FA;
-    ram      attribute colorMode default = 0x01;
+    ram      attribute colorMode default = 0x02;
     ram      attribute options default = 0x00;
     ram      attribute numberOfPrimaries;
     ram      attribute enhancedColorMode default = 0x01;
-    ram      attribute colorCapabilities default = 0x0018;
+    ram      attribute colorCapabilities default = 0x0019;
     ram      attribute colorTempPhysicalMinMireds default = 0x0000;
     ram      attribute colorTempPhysicalMaxMireds default = 0xFEFF;
     ram      attribute coupleColorTempToLevelMinMireds;
@@ -1935,9 +1938,16 @@ endpoint 1 {
     callback attribute acceptedCommandList;
     callback attribute eventList;
     callback attribute attributeList;
-    ram      attribute featureMap default = 0x18;
+    ram      attribute featureMap default = 0x19;
     ram      attribute clusterRevision default = 6;
 
+    handle command MoveToHue;
+    handle command MoveHue;
+    handle command StepHue;
+    handle command MoveToSaturation;
+    handle command MoveSaturation;
+    handle command StepSaturation;
+    handle command MoveToHueAndSaturation;
     handle command MoveToColor;
     handle command MoveColor;
     handle command StepColor;
