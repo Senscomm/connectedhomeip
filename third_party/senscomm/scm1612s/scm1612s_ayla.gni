@@ -278,6 +278,7 @@ template("scm1612s_ayla_sources") {
         "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/color_format.c",
         "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/led_widget.c",
         "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/lighting_mgr.c",
+        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/lighting_ctrl.c",
       ]
     }
 
