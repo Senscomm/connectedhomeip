@@ -115,7 +115,7 @@ chip::app::Clusters::NetworkCommissioning::Instance sWiFiNetworkCommissioningIns
 #endif
 
 #if !CHIP_BUILD_EXAMPLE_CREDS
-chip::DeviceLayer::FactoryDataProvider mFactoryDataProvider;
+chip::DeviceLayer::FactoryDataProvider& mFactoryDataProvider = chip::DeviceLayer::FactoryDataProvider::GetInstance();
 #endif
 } // namespace
 

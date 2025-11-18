@@ -14,6 +14,7 @@
 
 import("//build_overrides/chip.gni")
 import("//build_overrides/scm1612s.gni")
+import("${chip_root}/src/platform/senscomm/scm1612s/args.gni")
 
 template("scm1612s_ayla_sources") {
   product_class = invoker.product_class
@@ -97,6 +98,11 @@ template("scm1612s_ayla_sources") {
     if (defined(invoker.defines)) {
       defines += invoker.defines
     }
+    # Use our own Macro
+    if (chip_build_example_creds) {
+      defines += [ "AYLA_CHIP_BUILD_EXAMPLE_CREDS=1" ]
+    }
+
     cflags = [
       # avoid warning to error temporarily
       #"-Wno-error",
@@ -176,7 +182,7 @@ template("scm1612s_ayla_sources") {
       #adm
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm.cpp", 
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm_cli.cpp",
-      "${scm1612s_sdk_root}/app/ayla/components/adm/adm_data_provider.cpp", 
+      #"${scm1612s_sdk_root}/app/ayla/components/adm/adm_data_provider.cpp", 
       "${scm1612s_sdk_root}/app/ayla/components/adm/ayla-server.cpp",
       "${scm1612s_sdk_root}/app/ayla/components/adm/ayla-lc-server.cpp",
       #ayla
@@ -277,6 +283,10 @@ template("scm1612s_ayla_sources") {
 
     if (defined(invoker.sources)) {
       sources += invoker.sources
+    }
+
+    if (chip_build_example_creds) {
+      sources += [ "${scm1612s_sdk_root}/app/ayla/components/adm/adm_data_provider.cpp" ]
     }
 
     public_deps = []
