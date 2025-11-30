@@ -72,7 +72,9 @@ template("scm1612s_ayla_sources") {
 
     if (product_class == "led_demo" || product_class == "bulb") {
       include_dirs += [
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bp5758d"
+        "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d",
+        "${scm1612s_sdk_root}/app/ayla/common/lighting",
+        "${scm1612s_sdk_root}/app/ayla/common/event"
       ]
     }
 
@@ -259,8 +261,8 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/al/wise/pfm_ada_thread.c",
       "${scm1612s_sdk_root}/app/ayla/components/al/wise/pfm_net_socket_init.c",
       #demo
+      "${scm1612s_sdk_root}/app/ayla/common/event/app_event.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_common.c",
-      "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_event.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_main.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/demo_ota.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/sched_conf.c",
@@ -270,15 +272,15 @@ template("scm1612s_ayla_sources") {
     ]
     if (product_class == "led_demo" || product_class == "bulb") {
       sources += [
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bp5758d/bp5758d.c",
+        "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d/bp5758d.c",
       ]
     }
     if (product_class == "bulb") {
       sources += [
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/color_format.c",
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/led_widget.c",
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/lighting_mgr.c",
-        "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/bulb/lighting_ctrl.c",
+        "${scm1612s_sdk_root}/app/ayla/common/lighting/color_format.c",
+        "${scm1612s_sdk_root}/app/ayla/common/lighting/led_widget.c",
+        "${scm1612s_sdk_root}/app/ayla/common/lighting/lighting_mgr.c",
+        "${scm1612s_sdk_root}/app/ayla/common/lighting/lighting_ctrl.c",
       ]
     }
 
