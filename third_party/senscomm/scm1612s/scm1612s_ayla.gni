@@ -180,7 +180,7 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/ada/sprop.c",
       "${scm1612s_sdk_root}/app/ayla/components/ada/sys_conf.c",
       "${scm1612s_sdk_root}/app/ayla/components/ada/test_svc.c",
-      "${scm1612s_sdk_root}/app/ayla/components/ada/certs/ca_certs_der_txt.c",
+      "${scm1612s_sdk_root}/app/ayla/components/ada/certs/ca_certs_pem_txt.c",
       #adm
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm.cpp", 
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm_cli.cpp",
