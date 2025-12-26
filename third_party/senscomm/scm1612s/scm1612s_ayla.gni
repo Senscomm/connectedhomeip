@@ -39,6 +39,7 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/paho/MQTTPacket/src",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/${product_class}",
+      "${scm1612s_sdk_root}/app/ayla/common/host_prop_mgr",
       "${scm1612s_sdk_root}/api/include",
       "${scm1612s_sdk_root}/include/FreeRTOS",
       "${scm1612s_sdk_root}/include/freebsd",
@@ -261,6 +262,7 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/al/wise/pfm_ada_thread.c",
       "${scm1612s_sdk_root}/app/ayla/components/al/wise/pfm_net_socket_init.c",
       #demo
+      "${scm1612s_sdk_root}/app/ayla/common/host_prop_mgr/host_prop_mgr.c",
       "${scm1612s_sdk_root}/app/ayla/common/event/app_event.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_common.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_main.c",
