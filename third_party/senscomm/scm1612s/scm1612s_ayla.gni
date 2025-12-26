@@ -74,7 +74,8 @@ template("scm1612s_ayla_sources") {
       include_dirs += [
         "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d",
         "${scm1612s_sdk_root}/app/ayla/common/lighting",
-        "${scm1612s_sdk_root}/app/ayla/common/event"
+        "${scm1612s_sdk_root}/app/ayla/common/event",
+        "${scm1612s_sdk_root}/app/ayla/common/ftm"
       ]
     }
 
@@ -262,6 +263,9 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/al/wise/pfm_net_socket_init.c",
       #demo
       "${scm1612s_sdk_root}/app/ayla/common/event/app_event.c",
+      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm.c",
+      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_bulb.c",
+      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_wifi.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_common.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_main.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/demo_ota.c",
