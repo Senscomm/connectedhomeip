@@ -107,6 +107,13 @@ template("scm1612s_ayla_sources") {
     if (chip_build_example_creds) {
       defines += [ "AYLA_CHIP_BUILD_EXAMPLE_CREDS=1" ]
     }
+    if (product_class == "bulb") {
+      defines += ["CONFIG_AYLA_BULB"]
+    }
+    if (product_class == "plug") {
+      defines += ["CONFIG_AYLA_PLUG"]
+    }
+
 
     cflags = [
       # avoid warning to error temporarily
@@ -266,9 +273,6 @@ template("scm1612s_ayla_sources") {
       #demo
       "${scm1612s_sdk_root}/app/ayla/common/host_prop_mgr/host_prop_mgr.c",
       "${scm1612s_sdk_root}/app/ayla/common/event/app_event.c",
-      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm.c",
-      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_bulb.c",
-      "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_wifi.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_common.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/app_main.c",
       "${scm1612s_sdk_root}/app/ayla/ayla_matter_demo/main/demo_ota.c",
@@ -281,6 +285,9 @@ template("scm1612s_ayla_sources") {
       sources += [
         "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d/bp5758d.c",
         "${scm1612s_sdk_root}/app/ayla/common/power_cycle_reset/power_cycle_reset.c",
+        "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm.c",
+        "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_bulb.c",
+        "${scm1612s_sdk_root}/app/ayla/common/ftm/ftm_wifi.c",
       ]
     }
     if (product_class == "bulb") {
