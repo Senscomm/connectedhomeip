@@ -75,7 +75,8 @@ template("scm1612s_ayla_sources") {
         "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d",
         "${scm1612s_sdk_root}/app/ayla/common/lighting",
         "${scm1612s_sdk_root}/app/ayla/common/event",
-        "${scm1612s_sdk_root}/app/ayla/common/ftm"
+        "${scm1612s_sdk_root}/app/ayla/common/ftm",
+        "${scm1612s_sdk_root}/app/ayla/common/power_cycle_reset"
       ]
     }
 
@@ -277,6 +278,7 @@ template("scm1612s_ayla_sources") {
     if (product_class == "led_demo" || product_class == "bulb") {
       sources += [
         "${scm1612s_sdk_root}/app/ayla/common/driver/bp5758d/bp5758d.c",
+        "${scm1612s_sdk_root}/app/ayla/common/power_cycle_reset/power_cycle_reset.c",
       ]
     }
     if (product_class == "bulb") {
