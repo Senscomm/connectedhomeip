@@ -15,6 +15,64 @@
 import("//build_overrides/scm1612s.gni")
 import("${scm1612s_sdk_build_root}/scm1612s_sdk.gni")
 
+# Add exclusion paths
+exclude_dirs = [
+  "${scm1612s_sdk_root}/prebuilt",
+]
+# Add exclusion *.a patterns
+exclude_pattern = [
+  "iperf3",
+  "mdns",
+  "sntp",
+  "examples",
+  "wise",
+  "spiffs",
+  "dhcps",
+  "http_parser",
+  "http_server",
+  # very special, because we need hal-drivers-wlan-senscomm-prv.a
+  "hal-drivers-wlan-senscomm.a",
+  "hal-soc-scm2010-rom.a",
+  "hal-soc-scm2010-freertos-V10.2.1.a",
+  "app.a",
+]
+
+_script_args = [
+  rebase_path("${scm1612s_sdk_root}"),
+]
+
+if (exclude_dirs != []) {
+  _script_args += [ "--exclude-dirs" ]
+  foreach(dir, exclude_dirs) {
+    _script_args += [ rebase_path(dir) ]
+  }
+}
+
+if (exclude_pattern != []) {
+  _script_args += [ "--exclude-patterns" ]
+  foreach(pattern, exclude_pattern) {
+    _script_args += [ pattern ]
+  }
+}
+
+# Use relative Path
+_script_args += [ "--relative" ]
+# GN treats json as a whole string, parse line by line
+#_script_args += [ "--json" ]
+
+_wise_sdk_libs = exec_script(
+            "${scm1612s_sdk_build_root}/find_libs.py",
+            _script_args,
+            "list lines")
+
+_config_libs = []
+foreach(lib, _wise_sdk_libs) {
+  if (lib != "") {
+    print("Library: " + lib)
+    _config_libs += [ "${scm1612s_sdk_root}/${lib}" ]
+  }
+}
+
 declare_args() {
   # Build target to use for scm1612s SDK. Use this to set global SDK defines.
   scm1612s_target_project = ""
@@ -113,59 +171,9 @@ config("scm1612s_sdk_config") {
     ]
 
     # Pull out static libs (.a files) from SDK
-    libs = [
-      "${scm1612s_sdk_root}/kernel/kernel.a",
-      "${scm1612s_sdk_root}/api/api.a",
-      #"${scm1612s_sdk_root}/app/app.a",
-      "${scm1612s_sdk_root}/kernel/FreeRTOS/kernel-FreeRTOS.a",
-      "${scm1612s_sdk_root}/kernel/FreeRTOS-ext/kernel-FreeRTOS-ext.a",
-      "${scm1612s_sdk_root}/kernel/cmsis-freertos/kernel-cmsis-freertos.a",
-      "${scm1612s_sdk_root}/kernel/freebsd/kernel-freebsd.a",
-      "${scm1612s_sdk_root}/hal/arch/ndsv5/hal-arch-ndsv5.a",
-      "${scm1612s_sdk_root}/hal/soc/scm2010/hal-soc-scm2010.a",
-      "${scm1612s_sdk_root}/hal/board/scm2010-evb-qfn40/hal-board-scm2010-evb-qfn40.a",
-      "${scm1612s_sdk_root}/hal/drivers/spi-flash/hal-drivers-spi-flash.a",
-      "${scm1612s_sdk_root}/hal/drivers/wlan/hal-drivers-wlan.a",
-      "${scm1612s_sdk_root}/hal/drivers/wlan/senscomm/prv/hal-drivers-wlan-senscomm-prv.a",
-      "${scm1612s_sdk_root}/hal/drivers/rf/hal-drivers-rf.a",
-      "${scm1612s_sdk_root}/hal/drivers/watchdog/hal-drivers-watchdog.a",
-      "${scm1612s_sdk_root}/hal/drivers/i2c/hal-drivers-i2c.a",
-      "${scm1612s_sdk_root}/lib/cli/lib-cli.a",
-      "${scm1612s_sdk_root}/lib/stdlib-ext/lib-stdlib-ext.a",
-      "${scm1612s_sdk_root}/lib/proc/lib-proc.a",
-      "${scm1612s_sdk_root}/lib/serial/lib-serial.a",
-      "${scm1612s_sdk_root}/lib/net/lib-net.a",
-      "${scm1612s_sdk_root}/lib/fs/lib-fs.a",
-      "${scm1612s_sdk_root}/lib/lwip/lib-lwip.a",
-      "${scm1612s_sdk_root}/lib/net80211/lib-net80211.a",
-      "${scm1612s_sdk_root}/lib/ifconfig/lib-ifconfig.a",
-      "${scm1612s_sdk_root}/lib/libifconfig/lib-libifconfig.a",
-      "${scm1612s_sdk_root}/lib/cjson/lib-cjson.a",
-      "${scm1612s_sdk_root}/lib/hostap/wpa_supplicant/lib-hostap-wpa_supplicant.a",
-      "${scm1612s_sdk_root}/lib/mbedtls-2.28.10/library/lib-mbedtls-2.28.10-library.a",
-      "${scm1612s_sdk_root}/lib/ble/nimble_port/lib-ble-nimble_port.a",
-      "${scm1612s_sdk_root}/lib/ble/nimble_host/lib-ble-nimble_host.a",
-      "${scm1612s_sdk_root}/lib/tinycrypt/lib-tinycrypt.a",
-      "${scm1612s_sdk_root}/lib/scm_mcuboot/lib-scm_mcuboot.a",
-      "${scm1612s_sdk_root}/lib/net/freebsd/mbuf/lib-net-freebsd-mbuf.a",
-      "${scm1612s_sdk_root}/lib/net/freebsd/lib-net-freebsd.a",
-      "${scm1612s_sdk_root}/hal/core/hal-core.a",
-      "${scm1612s_sdk_root}/hal/proc/hal-proc.a",
-      "${scm1612s_sdk_root}/hal/drivers/core/hal-drivers-core.a",
-      "${scm1612s_sdk_root}/hal/fs/hal-fs.a",
-      "${scm1612s_sdk_root}/hal/fs/patch/hal-fs-patch.a",
-      "${scm1612s_sdk_root}/hal/drivers/serial/hal-drivers-serial.a",
-      "${scm1612s_sdk_root}/hal/drivers/rtc/hal-drivers-rtc.a",
-      "${scm1612s_sdk_root}/hal/drivers/clk/hal-drivers-clk.a",
-      "${scm1612s_sdk_root}/hal/drivers/pinctrl/hal-drivers-pinctrl.a",
-      "${scm1612s_sdk_root}/hal/drivers/ble/hal-drivers-ble.a",
-      "${scm1612s_sdk_root}/hal/drivers/ble/priv/hal-drivers-ble-priv.a",
-      "${scm1612s_sdk_root}/hal/drivers/crypto/hal-drivers-crypto.a",
-      "${scm1612s_sdk_root}/hal/drivers/efuse/hal-drivers-efuse.a",
-      "${scm1612s_sdk_root}/hal/drivers/systimer/hal-drivers-systimer.a",
-      "${scm1612s_sdk_root}/hal/drivers/pta/hal-drivers-pta.a",
-      "${scm1612s_sdk_root}/lib/scm_mcuboot/lib-scm_mcuboot.a",
-    ]
+    # Do not support the wildcard method
+    # libs = ["${scm1612s_sdk_root}/out-libs/*.a",]
+    libs = _config_libs
 }
 
 #source_set("syscalls_stub") {
