@@ -50,6 +50,18 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
+#include "ada/err.h"
+#include "ayla/utypes.h"
+#include "adb/adb.h"
+/**
+ * Apart from the "Matter" part in the broadcast, the remaining 16 bytes, len + type + name = 16, 
+ * and the maximum length of the name is 14 bytes!!
+ */
+// #define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
+#define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOO"
+static uint8_t fRemoveMatterAdvData = 0;
+static uint8_t fBleScanOn = 0;
+
 #define MAX_ADV_DATA_LEN 31
 #define CHIP_ADV_DATA_TYPE_FLAGS 0x01
 #define CHIP_ADV_DATA_FLAGS 0x06
@@ -722,6 +734,15 @@ void BLEManagerImpl::DriveBLEState(void)
         }
     }
 
+    /* Scanning always ON */
+    if (!fBleScanOn)
+    {
+        if (!adb_bt_scan_start_wrap())
+        {
+            fBleScanOn = 1;
+        }
+    }
+
     // If the application has enabled CHIPoBLE and BLE advertising...
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled &&
         mFlags.Has(Flags::kAdvertisingEnabled)
@@ -793,12 +814,19 @@ void BLEManagerImpl::DriveBLEState(void)
 
             // Transition to the not Advertising state...
             mFlags.Clear(Flags::kAdvertising);
-            mFlags.Set(Flags::kFastAdvertisingEnabled, true);
 
             ChipLogProgress(DeviceLayer, "CHIPoBLE advertising stopped");
 
             CancelBleAdvTimeoutTimer();
 
+            // The adv pkt no longer includes the Matter section.
+            mFlags.Set(Flags::kFastAdvertisingEnabled, false);
+            fRemoveMatterAdvData = 1;
+            ConfigureAdvertisingData();
+            StartAdvertising();
+            fRemoveMatterAdvData = 0;
+            mFlags.Set(Flags::kFastAdvertisingEnabled, true);
+#if 0
             // Post a CHIPoBLEAdvertisingChange(Stopped) event.
             {
                 ChipDeviceEvent advChange;
@@ -806,7 +834,7 @@ void BLEManagerImpl::DriveBLEState(void)
                 advChange.CHIPoBLEAdvertisingChange.Result = kActivity_Stopped;
                 err                                        = PlatformMgr().PostEvent(&advChange);
             }
-
+#endif
             ExitNow();
         }
     }
@@ -991,6 +1019,7 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     CHIP_ERROR err;
     uint8_t advData[MAX_ADV_DATA_LEN];
     uint8_t index = 0;
+    uint8_t len = strlen(HYD_BLE_ADV_NAME_DEMO);
 
     constexpr uint8_t kServiceDataTypeSize = 1;
 
@@ -999,6 +1028,13 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     // If a custom device name has not been specified, generate a CHIP-standard name based on the
     // bottom digits of the Chip device id.
     uint16_t discriminator;
+
+    if (fRemoveMatterAdvData)
+    {
+        memset(advData, 0, sizeof(advData));
+        goto HYDName;
+    }
+
     SuccessOrExit(err = GetCommissionableDataProvider()->GetSetupDiscriminator(discriminator));
 
     if (!mFlags.Has(Flags::kUseCustomDeviceName))
@@ -1056,8 +1092,29 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     memcpy(&advData[index], &deviceIdInfo, sizeof(deviceIdInfo));
     index = static_cast<uint8_t>(index + sizeof(deviceIdInfo));
 
-    // Construct the Chip BLE Service Data to be sent in the scan response packet.
-    err = MapBLEError(ble_gap_adv_set_data(advData, sizeof(advData)));
+HYDName:
+    // ayla uuid - Can be remove
+    advData[index++] = 2 + 1;
+    advData[index++] = 0x03;
+    advData[index++] = 0x28;
+    advData[index++] = 0xfe;
+
+    // Type: Device Name  0x08 or 0x09
+    advData[index++] = len + 1;
+    advData[index++] = 9;
+    memcpy(&advData[index], HYD_BLE_ADV_NAME_DEMO, len);
+    index += len;
+
+    if (fRemoveMatterAdvData)
+    {
+        err = MapBLEError(ble_gap_adv_set_data(advData, index));
+    }
+    else 
+    {
+        // Construct the Chip BLE Service Data to be sent in the scan response packet.
+        err = MapBLEError(ble_gap_adv_set_data(advData, sizeof(advData)));
+    }
+
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(DeviceLayer, "ble_gap_adv_set_data failed: %s %d", ErrorStr(err), discriminator);
@@ -1438,15 +1495,18 @@ int BLEManagerImpl::ble_svr_gap_event(struct ble_gap_event * event, void * arg)
         /* A new connection was established or a connection attempt failed */
         err = sInstance.HandleGAPConnect(event);
         SuccessOrExit(err);
+        BLEMgrImpl().StartAdvertising();
         break;
 
     case BLE_GAP_EVENT_DISCONNECT:
         err = sInstance.HandleGAPDisconnect(event);
         SuccessOrExit(err);
+        BLEMgrImpl().StartAdvertising();
         break;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         WISE_LOGD(TAG, "BLE_GAP_EVENT_ADV_COMPLETE event");
+        BLEMgrImpl().StartAdvertising();
         break;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -1480,6 +1540,8 @@ int BLEManagerImpl::ble_svr_gap_event(struct ble_gap_event * event, void * arg)
         break;
     }
 
+    // send to al_bt module to process again
+    adb_process_gap_event_wrap(event);
 exit:
     if (err != CHIP_NO_ERROR)
     {

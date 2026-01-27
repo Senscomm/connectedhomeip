@@ -82,6 +82,7 @@ template("scm1612s_ayla_sources") {
     }
 
     defines = [
+      "AYLA_BLUETOOTH_SUPPORT",
       "AYLA_MATTER_SUPPORT",
       "CONFIG_RENDEZVOUS_MODE=2", #Make it a build argument
       "SCM_PORT",
@@ -191,6 +192,11 @@ template("scm1612s_ayla_sources") {
       "${scm1612s_sdk_root}/app/ayla/components/ada/sys_conf.c",
       "${scm1612s_sdk_root}/app/ayla/components/ada/test_svc.c",
       "${scm1612s_sdk_root}/app/ayla/components/ada/certs/ca_certs_pem_txt.c",
+      # adb
+      "${scm1612s_sdk_root}/app/ayla/components/adb/adb.c",
+      "${scm1612s_sdk_root}/app/ayla/components/adb/adb_ayla_svc.c",
+      "${scm1612s_sdk_root}/app/ayla/components/adb/adb_conn_svc.c",
+      "${scm1612s_sdk_root}/app/ayla/components/adb/adb_wifi_cfg_svc.c",
       #adm
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm.cpp", 
       "${scm1612s_sdk_root}/app/ayla/components/adm/adm_cli.cpp",

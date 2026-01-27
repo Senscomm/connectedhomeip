@@ -78,7 +78,7 @@
  *    simultaneous BLE connections the application will establish).
  */
 #ifndef BLE_LAYER_NUM_BLE_ENDPOINTS
-#define BLE_LAYER_NUM_BLE_ENDPOINTS 1
+#define BLE_LAYER_NUM_BLE_ENDPOINTS 2
 #endif // BLE_LAYER_NUM_BLE_ENDPOINTS
 
 #if (BLE_LAYER_NUM_BLE_ENDPOINTS < 1)
