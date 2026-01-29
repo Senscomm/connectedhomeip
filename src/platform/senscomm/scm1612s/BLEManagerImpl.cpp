@@ -57,6 +57,7 @@
  * Apart from the "Matter" part in the broadcast, the remaining 16 bytes, len + type + name = 16, 
  * and the maximum length of the name is 14 bytes!!
  */
+// Note: If u remove ayla svc id, the device name max len is 14Bytes, or only 10 Bytes allowed!!!!
 // #define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
 #define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOO"
 static uint8_t fRemoveMatterAdvData = 0;
@@ -1093,7 +1094,7 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     index = static_cast<uint8_t>(index + sizeof(deviceIdInfo));
 
 HYDName:
-    // ayla uuid - Can be remove
+    // Note: ayla uuid - Can be removed!!!!!!!
     advData[index++] = 2 + 1;
     advData[index++] = 0x03;
     advData[index++] = 0x28;

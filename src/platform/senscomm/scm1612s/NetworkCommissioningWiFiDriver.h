@@ -128,7 +128,7 @@ public:
         static WiseWiFiDriver instance;
         return instance;
     }
-
+    WiFiNetwork mTmpNetwork   = {};
 private:
     bool NetworkMatch(const WiFiNetwork & network, ByteSpan networkId);
     bool StartScanWiFiNetworks(ByteSpan ssid);

@@ -68,10 +68,10 @@ template("scm1612s_sdk_sources") {
     }
 
     # Build wise-sdk in-place with specified menuconfig.
-    #exec_script("${scm1612s_sdk_build_root}/build-wise-sdk.py",
-            #[ rebase_path("${scm1612s_sdk_build_root}", root_build_dir),
-              #"scm1612s_matter_defconfig",
-            #])
+    exec_script("${scm1612s_sdk_build_root}/build-wise-sdk.py",
+            [ rebase_path("${scm1612s_sdk_build_root}", root_build_dir),
+              "scm1612s_matter_defconfig",
+            ])
 
     public_deps = []
     if (defined(invoker.public_deps)) {

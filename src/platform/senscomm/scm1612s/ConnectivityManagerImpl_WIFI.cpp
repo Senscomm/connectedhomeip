@@ -256,6 +256,19 @@ void ConnectivityManagerImpl::_OnWiFiPlatformEvent(const ChipDeviceEvent * event
     default:
         break;
     }
+
+    if (event->Platform.test.event.event_id ==  SYSTEM_EVENT_MAX_RETRY) 
+    {
+        uint8_t ssidLen = event->Platform.test.ssidLen;
+        uint8_t keyLen = event->Platform.test.keyLen;
+        // use ConnectWiFiNetwork() directly cause strange problems...
+        memcpy(NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.ssid, event->Platform.test.ssid, ssidLen);
+        NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.ssidLen = ssidLen;
+        memcpy(NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.credentials, event->Platform.test.key, keyLen);
+        NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.credentialsLen = keyLen;
+        NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.auth_mode = event->Platform.test.auth;
+        NetworkCommissioning::WiseWiFiDriver::GetInstance().Init(NULL);
+    }
 }
 
 #if CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION

@@ -59,13 +59,21 @@ CHIP_ERROR WiseWiFiDriver::Init(NetworkStatusChangeCallback * networkStatusChang
     ChipLogProgress(NetworkProvisioning, "WiseWiFiDriver::Init");
 
 
-#if 0
-    err = SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiSSID, "ax3");
-    VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
-    err = SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, "12345678");
-    VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
-    uint8_t auth = 2;
-    err = SCM1612SConfig::WriteConfigValueBin(SCM1612SConfig::kConfigKey_WiFiSEC, &auth, sizeof(auth));
+#if 1
+    // Note: Used a tricky method to avoid a problem
+    // If we directly use ConnectWiFiNetwork to Connect WiFi for HYD none matter BLE WiFi Provision
+    // A quirky problem happens: scm_wifi_sta_set_config does not store key values and get trapped in a cycle:
+    // SYSTEM_EVENT_STA_NO_NETWORK ==> Connect(failed) ==>SYSTEM_EVENT_STA_NO_NETWORK
+    if (networkStatusChangeCallback == NULL) 
+    {
+        // mSavedNetwork.
+        err = SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiSSID, mTmpNetwork.ssid);
+        VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
+        err = SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, mTmpNetwork.credentials);
+        VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
+        uint8_t auth = mTmpNetwork.auth_mode;
+        err = SCM1612SConfig::WriteConfigValueBin(SCM1612SConfig::kConfigKey_WiFiSEC, &auth, sizeof(auth));
+    }
 #endif
 
     // If reading fails, wifi is not provisioned, no need to go further.

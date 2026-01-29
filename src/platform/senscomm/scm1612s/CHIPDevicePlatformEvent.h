@@ -92,6 +92,16 @@ struct ChipDevicePlatformEvent final
             BLE_CONNECTION_OBJECT mConnection;
             chip::System::PacketBuffer * mData;
         } BLEIndicationReceived;
+        struct
+        {
+            system_event_t event;
+            char ssid[32];
+            uint8_t ssidLen;
+            char key[64];
+            uint8_t keyLen;
+            uint8_t auth;
+        } test;
+
     };
 };
 }; // namespace DeviceLayer
