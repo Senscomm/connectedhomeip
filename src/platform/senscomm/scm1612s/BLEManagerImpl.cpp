@@ -55,11 +55,10 @@
 #include "adb/adb.h"
 /**
  * Apart from the "Matter" part in the broadcast, the remaining 16 bytes, len + type + name = 16, 
- * and the maximum length of the name is 14 bytes!!
+ * so the max length of "device name" is 14 bytes. Ayla svc id takes 4 bytes, and can be removed
+ * in HYD biz.
  */
-// Note: If u remove ayla svc id, the device name max len is 14Bytes, or only 10 Bytes allowed!!!!
-// #define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
-#define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOO"
+#define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
 static uint8_t fRemoveMatterAdvData = 0;
 static uint8_t fBleScanOn = 0;
 
@@ -960,9 +959,9 @@ CHIP_ERROR BLEManagerImpl::InitSCMBleLayer(void)
         }
     }
 
+    /* Set BLE Host task prio 4 and stack_size max (4096), related fixes need to be synced in npl_freertos_task_init */
 	ble_npl_task_init(&s_task_host, "nimble_host", bleprph_host_task,
-			NULL, 0, 0,
-			NULL, 0);
+			NULL, 4, 0, NULL, 4096);
 
     xSemaphoreTake(semaphoreHandle, portMAX_DELAY);
     vSemaphoreDelete(semaphoreHandle);
@@ -1094,13 +1093,14 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     index = static_cast<uint8_t>(index + sizeof(deviceIdInfo));
 
 HYDName:
-    // Note: ayla uuid - Can be removed!!!!!!!
+    /* Ayla svc id - 0xfe28, add if needed */
+#if 0
     advData[index++] = 2 + 1;
     advData[index++] = 0x03;
     advData[index++] = 0x28;
     advData[index++] = 0xfe;
-
-    // Type: Device Name  0x08 or 0x09
+#endif
+    /* Type: Device Name  0x08 or 0x09 */
     advData[index++] = len + 1;
     advData[index++] = 9;
     memcpy(&advData[index], HYD_BLE_ADV_NAME_DEMO, len);
