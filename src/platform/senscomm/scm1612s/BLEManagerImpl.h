@@ -258,6 +258,9 @@ private:
     void CancelBleAdvTimeoutTimer(void);
     static void BleAdvTimeoutHandler(System::Layer *, void *);
 
+    void StartBleAdvWatchTimer(uint32_t aTimeoutInMs);
+    static void BleAdvWatchTimeoutHandler(System::Layer *, void *);
+
     CHIP_ERROR DeinitBLE();
     static void ClaimBLEMemory(System::Layer *, void *);
 

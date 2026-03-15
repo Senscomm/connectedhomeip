@@ -58,9 +58,16 @@
  * so the max length of "device name" is 14 bytes. Ayla svc id takes 4 bytes, and can be removed
  * in HYD biz.
  */
-#define  HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
+#define SUPPORT_AYLA_SVC_ID 0
+#if SUPPORT_AYLA_SVC_ID
+#define HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOO"
+#else
+#define HYD_BLE_ADV_NAME_DEMO          "HYD-06FLOORW"
+#endif
+
 static uint8_t fRemoveMatterAdvData = 0;
 static uint8_t fBleScanOn = 0;
+static bool isFromBLEGAP = false;
 
 #define MAX_ADV_DATA_LEN 31
 #define CHIP_ADV_DATA_TYPE_FLAGS 0x01
@@ -257,6 +264,7 @@ CHIP_ERROR BLEManagerImpl::_SetAdvertisingEnabled(bool val)
     if (val)
     {
         StartBleAdvTimeoutTimer(CHIP_DEVICE_CONFIG_BLE_ADVERTISING_INTERVAL_CHANGE_TIME);
+        StartBleAdvWatchTimer(6000);
     }
 
     mFlags.Set(Flags::kFastAdvertisingEnabled, val);
@@ -377,6 +385,7 @@ void BLEManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
         break;
 
     case DeviceEventType::kServiceProvisioningChange:
+        printf("!!!Recv an test event!!!\n");
     case DeviceEventType::kWiFiConnectivityChange:
         // Force the advertising configuration to be refreshed to reflect new provisioning state.
         ChipLogProgress(DeviceLayer, "Updating advertising data");
@@ -707,8 +716,36 @@ void BLEManagerImpl::StartBleAdvTimeoutTimer(uint32_t aTimeoutInMs)
     }
 }
 
+void BLEManagerImpl::BleAdvWatchTimeoutHandler(System::Layer *, void *)
+{
+    CHIP_ERROR err = SystemLayer().StartTimer(System::Clock::Milliseconds32(5000), BleAdvWatchTimeoutHandler, nullptr);
+    if ((err != CHIP_NO_ERROR))
+    {
+        ChipLogError(DeviceLayer, "Failed to start BledAdv timeout watch timer");
+    }
+
+    PlatformMgr().ScheduleWork(DriveBLEState, 2);
+
+}
+
+void BLEManagerImpl::StartBleAdvWatchTimer(uint32_t aTimeoutInMs)
+{
+    if (SystemLayer().IsTimerActive(BleAdvWatchTimeoutHandler, nullptr))
+    {
+        SystemLayer().CancelTimer(BleAdvWatchTimeoutHandler, nullptr);
+    }
+
+
+    CHIP_ERROR err = SystemLayer().StartTimer(System::Clock::Milliseconds32(aTimeoutInMs), BleAdvWatchTimeoutHandler, nullptr);
+    if ((err != CHIP_NO_ERROR))
+    {
+        ChipLogError(DeviceLayer, "Failed to start BledAdv timeout watch timer");
+    }
+}
+
 void BLEManagerImpl::DriveBLEState(void)
 {
+    bool oldFlag = fRemoveMatterAdvData;
     CHIP_ERROR err = CHIP_NO_ERROR;
 
     // Perform any initialization actions that must occur after the Chip task is running.
@@ -761,6 +798,7 @@ void BLEManagerImpl::DriveBLEState(void)
             // be called again, and execution will proceed to the code below.
             if (!mFlags.Has(Flags::kAdvertisingConfigured))
             {
+                fRemoveMatterAdvData = 0;
                 err = ConfigureAdvertisingData();
                 if (err != CHIP_NO_ERROR)
                 {
@@ -770,7 +808,7 @@ void BLEManagerImpl::DriveBLEState(void)
             }
 
             // Start advertising.  This is also an asynchronous step.
-            WISE_LOGD(TAG, "NimBLE start advertising...");
+            WISE_LOGI(TAG, "DriveBLESTATE start advertising...");
             err = StartAdvertising();
             if (err != CHIP_NO_ERROR)
             {
@@ -814,19 +852,13 @@ void BLEManagerImpl::DriveBLEState(void)
 
             // Transition to the not Advertising state...
             mFlags.Clear(Flags::kAdvertising);
+            mFlags.Set(Flags::kFastAdvertisingEnabled, true);
 
-            ChipLogProgress(DeviceLayer, "CHIPoBLE advertising stopped");
+            WISE_LOGI(TAG, "DriveBLESTATE stop advertising...");
 
             CancelBleAdvTimeoutTimer();
 
-            // The adv pkt no longer includes the Matter section.
-            mFlags.Set(Flags::kFastAdvertisingEnabled, false);
             fRemoveMatterAdvData = 1;
-            ConfigureAdvertisingData();
-            StartAdvertising();
-            fRemoveMatterAdvData = 0;
-            mFlags.Set(Flags::kFastAdvertisingEnabled, true);
-#if 0
             // Post a CHIPoBLEAdvertisingChange(Stopped) event.
             {
                 ChipDeviceEvent advChange;
@@ -834,7 +866,7 @@ void BLEManagerImpl::DriveBLEState(void)
                 advChange.CHIPoBLEAdvertisingChange.Result = kActivity_Stopped;
                 err                                        = PlatformMgr().PostEvent(&advChange);
             }
-#endif
+
             ExitNow();
         }
     }
@@ -851,6 +883,16 @@ exit:
     {
         ChipLogError(DeviceLayer, "Disabling CHIPoBLE service due to error: %s", ErrorStr(err));
         mServiceMode = ConnectivityManager::kCHIPoBLEServiceMode_Disabled;
+    }
+
+    if (isFromBLEGAP || !mFlags.Has(Flags::kAdvertising))
+    {
+        if (1 || !ble_gap_adv_active() || oldFlag != fRemoveMatterAdvData)
+        {
+            ConfigureAdvertisingData();
+            StartAdvertising();
+            WISE_LOGI(TAG, "Cur BLE adv: %s, restart adv.", ble_gap_adv_active() ? "active" : "inactive");
+        }
     }
 }
 
@@ -1031,6 +1073,7 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
 
     if (fRemoveMatterAdvData)
     {
+        // WISE_LOGI(TAG, "Remove Matter Data...");
         memset(advData, 0, sizeof(advData));
         goto HYDName;
     }
@@ -1093,8 +1136,8 @@ CHIP_ERROR BLEManagerImpl::ConfigureAdvertisingData(void)
     index = static_cast<uint8_t>(index + sizeof(deviceIdInfo));
 
 HYDName:
+#if SUPPORT_AYLA_SVC_ID
     /* Ayla svc id - 0xfe28, add if needed */
-#if 0
     advData[index++] = 2 + 1;
     advData[index++] = 0x03;
     advData[index++] = 0x28;
@@ -1489,6 +1532,7 @@ bool BLEManagerImpl::IsSubscribed(uint16_t conId)
 int BLEManagerImpl::ble_svr_gap_event(struct ble_gap_event * event, void * arg)
 {
     CHIP_ERROR err = CHIP_NO_ERROR;
+    bool needStartAdv = false;
 
     switch (event->type)
     {
@@ -1496,18 +1540,18 @@ int BLEManagerImpl::ble_svr_gap_event(struct ble_gap_event * event, void * arg)
         /* A new connection was established or a connection attempt failed */
         err = sInstance.HandleGAPConnect(event);
         SuccessOrExit(err);
-        BLEMgrImpl().StartAdvertising();
+        needStartAdv = true;
         break;
 
     case BLE_GAP_EVENT_DISCONNECT:
         err = sInstance.HandleGAPDisconnect(event);
         SuccessOrExit(err);
-        BLEMgrImpl().StartAdvertising();
+        needStartAdv = true;
         break;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
-        WISE_LOGD(TAG, "BLE_GAP_EVENT_ADV_COMPLETE event");
-        BLEMgrImpl().StartAdvertising();
+        WISE_LOGI(TAG, "BLE_GAP_EVENT_ADV_COMPLETE event");
+        needStartAdv = true;
         break;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -1551,7 +1595,10 @@ exit:
     }
 
     // Schedule DriveBLEState() to run.
-    PlatformMgr().ScheduleWork(DriveBLEState, 0);
+    if (needStartAdv)
+    {
+        PlatformMgr().ScheduleWork(DriveBLEState, 1);
+    }
 
     return err.AsInteger();
 }
@@ -1682,7 +1729,7 @@ CHIP_ERROR BLEManagerImpl::StartAdvertising(void)
 
     // Advertise in fast mode if it is connectable advertisement and
     // the application has expressly requested fast advertising.
-    if (connectable && mFlags.Has(Flags::kFastAdvertisingEnabled))
+    if (0 && connectable && mFlags.Has(Flags::kFastAdvertisingEnabled))
     {
         adv_params.itvl_min = CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MIN;
         adv_params.itvl_max = CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MAX;
@@ -1758,6 +1805,7 @@ CHIP_ERROR BLEManagerImpl::StartAdvertising(void)
 
 void BLEManagerImpl::DriveBLEState(intptr_t arg)
 {
+    isFromBLEGAP = !!arg;
     sInstance.DriveBLEState();
 }
 
