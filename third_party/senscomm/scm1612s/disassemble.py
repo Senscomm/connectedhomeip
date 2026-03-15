@@ -29,7 +29,8 @@ def main(in_file: str, out_file: str):
 #    print(outs.decode())
 
     with open(out_file, "w") as f:
-        f.write(outs.decode())
+        # default utf-8 will have some problems
+        f.write(outs.decode('latin-1'))
 
 if __name__ == '__main__':
     main(in_file=sys.argv[1], out_file=sys.argv[2])
