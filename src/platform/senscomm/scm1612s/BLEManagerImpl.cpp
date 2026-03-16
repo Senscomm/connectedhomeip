@@ -891,7 +891,7 @@ exit:
         {
             ConfigureAdvertisingData();
             StartAdvertising();
-            WISE_LOGI(TAG, "Cur BLE adv: %s, restart adv.", ble_gap_adv_active() ? "active" : "inactive");
+            // WISE_LOGI(TAG, "Cur BLE adv: %s, restart adv.", ble_gap_adv_active() ? "active" : "inactive");
         }
     }
 }
