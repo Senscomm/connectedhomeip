@@ -16,6 +16,8 @@ import("//build_overrides/chip.gni")
 import("//build_overrides/scm1612s.gni")
 import("${chip_root}/src/platform/senscomm/scm1612s/args.gni")
 
+support_power_measure = true
+
 template("scm1612s_ayla_sources") {
   product_class = invoker.product_class
   config("ayla_configs") {
@@ -78,6 +80,13 @@ template("scm1612s_ayla_sources") {
         "${scm1612s_sdk_root}/app/ayla/common/event",
         "${scm1612s_sdk_root}/app/ayla/common/ftm",
         "${scm1612s_sdk_root}/app/ayla/common/power_cycle_reset"
+      ]
+    }
+
+    if (product_class == "plug" && support_power_measure) {
+      include_dirs += [
+        "${scm1612s_sdk_root}/app/ayla/common/driver/bl0937",
+        "${scm1612s_sdk_root}/app/ayla/common/power_measure/include"
       ]
     }
 
@@ -298,6 +307,14 @@ template("scm1612s_ayla_sources") {
         "${scm1612s_sdk_root}/app/ayla/common/lighting/lighting_ctrl.c",
       ]
     }
+    if (product_class == "plug" && support_power_measure) {
+      sources += [
+        "${scm1612s_sdk_root}/app/ayla/common/driver/bl0937/bl0937.c",
+        "${scm1612s_sdk_root}/app/ayla/common/power_measure/src/power_measure_api.c",
+        "${scm1612s_sdk_root}/app/ayla/common/power_measure/src/power_measure_bl0937.c",
+      ]
+    }
+
 
     if (defined(invoker.sources)) {
       sources += invoker.sources
