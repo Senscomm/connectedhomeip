@@ -827,7 +827,9 @@ CHIP_ERROR FactoryDataProvider::GetProductLabel(char * buf, size_t bufSize)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
+    /* Keep same with DCL */
+    strcpy(buf, "Floor Lamp");
+    return CHIP_NO_ERROR;
 #endif
 }
 
