@@ -174,7 +174,7 @@
  * Human readable vendor name for the organization responsible for producing the device.
  */
 #ifndef CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME
-#define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME "TEST_VENDOR"
+#define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME "Giant Lighting Technology"
 #endif
 
 /**
@@ -197,7 +197,7 @@
  * Human readable name of the device model.
  */
 #ifndef CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME
-#define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME "TEST_PRODUCT"
+#define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME "HYD-1201000B"
 #endif
 
 /**

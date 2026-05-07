@@ -700,9 +700,9 @@ CHIP_ERROR FactoryDataProvider::GetVendorName(char * buf, size_t bufSize)
 
     return CHIP_ERROR_BUFFER_TOO_SMALL;
 #else
-    static const char vendorName[] = "Senscomm";
-    strncpy(buf, vendorName, bufSize);
-
+    /* Currently, hardcode in SDK */
+    ReturnErrorCodeIf(bufSize < sizeof(CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME), CHIP_ERROR_BUFFER_TOO_SMALL);
+    strcpy(buf, CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME);
     return CHIP_NO_ERROR;
 #endif
 }
@@ -833,21 +833,19 @@ CHIP_ERROR FactoryDataProvider::GetProductLabel(char * buf, size_t bufSize)
 
 CHIP_ERROR FactoryDataProvider::GetSerialNumber(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
-    int len = 0;
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    /* For Ayla related projects, we use Ayla DSN as SN. */
+    int ret;
+    off_t offset;
+    uint8_t ayla_dsn[20];
 
-    len = mfd_getSerialNumber(buf, bufSize);
-    if (len > 0)
-    {
-        buf[len] = 0;
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+    /* ayla oem offset : 0x0000, dsn offset : 0x0 */
+    offset = 0x0000 + 0x0;
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, ayla_dsn, sizeof(ayla_dsn));
+    /* bufSize = kMaxSerialNumberLength + 1 is enough. */
+    memcpy(buf, ayla_dsn, 20);
+    ChipLogError(DeviceLayer, "SerialNumber (Ayla DSN): %s", buf);
+    return CHIP_NO_ERROR;
 #else
     strncpy(buf, CHIP_DEVICE_CONFIG_TEST_SERIAL_NUMBER, bufSize);
 
