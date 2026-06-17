@@ -228,8 +228,8 @@ CHIP_ERROR BLEManagerImpl::_Init()
     memset(mDeviceName, 0, sizeof(mDeviceName));
 
     PlatformMgr().ScheduleWork(DriveBLEState, 0);
-
-    StartBleAdvWatchTimer(6000);
+    /* Note: This workaround may be removed. */
+    // StartBleAdvWatchTimer(6000);
 exit:
     return err;
 }
@@ -806,7 +806,7 @@ void BLEManagerImpl::DriveBLEState(void)
             }
 
             // Start advertising.  This is also an asynchronous step.
-            WISE_LOGI(TAG, "NimBLE start advertising...");
+            ChipLogProgress(DeviceLayer, "CHIPoBLE advertising start");
             err = StartAdvertising();
             if (err != CHIP_NO_ERROR)
             {
@@ -858,8 +858,7 @@ void BLEManagerImpl::DriveBLEState(void)
             // Transition to the not Advertising state...
             mFlags.Clear(Flags::kAdvertising);
 
-            // ChipLogProgress(DeviceLayer, "CHIPoBLE advertising stopped");
-            WISE_LOGI(TAG, "NimBLE stop advertising...");
+            ChipLogProgress(DeviceLayer, "CHIPoBLE advertising stopped");
 
             CancelBleAdvTimeoutTimer();
 
@@ -1200,11 +1199,12 @@ void BLEManagerImpl::HandleRXCharWrite(struct ble_gatt_char_context * param)
     CHIP_ERROR err    = CHIP_NO_ERROR;
     uint16_t data_len = 0;
 
-    WISE_LOGI(TAG, "Write request received for CHIPoBLE RX characteristic con %u %u", param->conn_handle, param->attr_handle);
-
     // Copy the data to a packet buffer.
     data_len               = OS_MBUF_PKTLEN(param->ctxt->om);
     PacketBufferHandle buf = System::PacketBufferHandle::New(data_len, 0);
+
+    WISE_LOGI(TAG, "Write request received for CHIPoBLE RX characteristic con %u %u, data len:%u", param->conn_handle, param->attr_handle, data_len);
+
     VerifyOrExit(!buf.IsNull(), err = CHIP_ERROR_NO_MEMORY);
     VerifyOrExit(buf->AvailableDataLength() >= data_len, err = CHIP_ERROR_BUFFER_TOO_SMALL);
     ble_hs_mbuf_to_flat(param->ctxt->om, buf->Start(), data_len, NULL);

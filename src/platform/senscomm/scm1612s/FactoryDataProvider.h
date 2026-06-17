@@ -26,6 +26,8 @@
 namespace chip {
 namespace DeviceLayer {
 
+CHIP_ERROR LoadUniqueIdFromFactoryData(MutableByteSpan & uniqueIdSpan);
+
 class FactoryDataProvider : public chip::Credentials::DeviceAttestationCredentialsProvider,
                             public CommissionableDataProvider,
                             public DeviceInstanceInfoProvider

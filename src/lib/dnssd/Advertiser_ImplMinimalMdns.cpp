@@ -959,7 +959,7 @@ void AdvertiserMinMdns::AdvertiseRecords(BroadcastAdvertiseType type)
 
         if (err != CHIP_NO_ERROR)
         {
-            ChipLogError(Discovery, "Failed to advertise records: %" CHIP_ERROR_FORMAT, err.Format());
+            ChipLogDetail(Discovery, "Failed to advertise records: %" CHIP_ERROR_FORMAT, err.Format());
         }
     }
 

@@ -25,12 +25,16 @@
 /* this file behaves like a config.h, comes first */
 #include <platform/internal/CHIPDeviceLayerInternal.h>
 
+#include <lib/support/Base64.h>
+#include <lib/support/BytesToHex.h>
 #include <platform/internal/GenericConfigurationManagerImpl.ipp>
+#include <platform/DeviceInstanceInfoProvider.h>
 
 #include <platform/ConfigurationManager.h>
 #include <platform/DiagnosticDataProvider.h>
 #include <platform/senscomm/scm1612s/SCM1612SConfig.h>
 
+#include "FactoryDataProvider.h"
 #include "stdio.h"
 
 #include "wise_event_loop.h"
@@ -45,6 +49,12 @@ namespace DeviceLayer {
 
 using namespace ::chip::DeviceLayer::Internal;
 
+CHIP_ERROR LoadFactoryUniqueId(uint8_t (&uniqueId)[ConfigurationManager::kRotatingDeviceIDUniqueIDLength])
+{
+    MutableByteSpan uniqueIdSpan(uniqueId);
+    return LoadUniqueIdFromFactoryData(uniqueIdSpan);
+}
+
 ConfigurationManagerImpl & ConfigurationManagerImpl::GetDefaultInstance()
 {
     static ConfigurationManagerImpl sInstance;
@@ -56,6 +66,17 @@ CHIP_ERROR ConfigurationManagerImpl::Init()
     CHIP_ERROR err;
     bool failSafeArmed;
 
+#if 0
+    /* already calls Internal::GenericConfigurationManagerImpl<SCM1612SConfig>::Init() */
+    char uniqueId[32 + 1];
+    // Generate Unique ID only if it is not present in the storage.
+    if (GetUniqueId(uniqueId, sizeof(uniqueId)) != CHIP_NO_ERROR)
+    {
+        ReturnErrorOnFailure(GenerateUniqueId(uniqueId, sizeof(uniqueId)));
+        printf("1212uniqueId:%s\n", uniqueId);
+        ReturnErrorOnFailure(StoreUniqueId(uniqueId, strlen(uniqueId)));
+    }
+#endif
     // Initialize the generic implementation base class.
     err = Internal::GenericConfigurationManagerImpl<SCM1612SConfig>::Init();
     SuccessOrExit(err);
@@ -168,7 +189,9 @@ CHIP_ERROR ConfigurationManagerImpl::WritePersistedStorageValue(::chip::Platform
                                                                 uint32_t value)
 {
     CHIP_ERROR err;
-    SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, (char *) &persistedStorageKey };
+    /* according to Key's format see CHIP_CONFIG_PERSISTED_STORAGE_KEY_TYPE */
+    // SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, (char *) &persistedStorageKey };
+    SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, persistedStorageKey };
 
     err = WriteConfigValue(configKey, value);
     {
@@ -292,6 +315,97 @@ CHIP_ERROR ConfigurationManagerImpl::GetPrimaryWiFiMACAddress(uint8_t * buf)
 ConfigurationManager & ConfigurationMgrImpl()
 {
     return ConfigurationManagerImpl::GetDefaultInstance();
+}
+
+CHIP_ERROR ConfigurationManagerImpl::GetUniqueId(char * buf, size_t bufSize)
+{
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE || 1
+    CHIP_ERROR err;
+    size_t uniqueIdLen = 0;
+    err = SCM1612SConfig::ReadConfigValueStr(SCM1612SConfig::kConfigKey_UniqueId, buf, bufSize, uniqueIdLen);
+
+    ReturnErrorOnFailure(err);
+
+    ReturnErrorCodeIf(uniqueIdLen >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    buf[uniqueIdLen] = '\0';
+    ReturnErrorCodeIf(buf[uniqueIdLen] != 0, CHIP_ERROR_INVALID_STRING_LENGTH);
+
+    // get the flash uniqueID
+    uint8_t uniqueIdStoreInFile[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
+    const uint8_t decodeLen =
+        static_cast<uint8_t>(chip::Base64Decode32(buf, static_cast<uint32_t>(strlen(buf)), uniqueIdStoreInFile));
+    ReturnErrorCodeIf(decodeLen != sizeof(uniqueIdStoreInFile), CHIP_ERROR_INVALID_STRING_LENGTH);
+
+    uint8_t uniqueIdStoreInFactoryData[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
+    char uniqueIdStoreHex[sizeof(uniqueIdStoreInFile) * 2 + 1]               = { 0 };
+    char uniqueIdStoreInFactoryDataHex[sizeof(uniqueIdStoreInFactoryData) * 2 + 1] = { 0 };
+
+    err = LoadFactoryUniqueId(uniqueIdStoreInFactoryData);
+    ReturnErrorOnFailure(err);
+
+    ReturnErrorOnFailure(chip::Encoding::BytesToUppercaseHexBuffer(uniqueIdStoreInFile, 
+        sizeof(uniqueIdStoreInFile), uniqueIdStoreHex,
+        sizeof(uniqueIdStoreHex) - 1));
+
+    ReturnErrorOnFailure(chip::Encoding::BytesToUppercaseHexBuffer(uniqueIdStoreInFactoryData, 
+        sizeof(uniqueIdStoreInFactoryData),uniqueIdStoreInFactoryDataHex, 
+        sizeof(uniqueIdStoreInFactoryDataHex) - 1));
+
+    ChipLogProgress(DeviceLayer, "uniqueId in FS:%s; in Flash:%s", uniqueIdStoreHex, uniqueIdStoreInFactoryDataHex);
+
+    const bool uniqueIdsMatch = memcmp(uniqueIdStoreInFile, uniqueIdStoreInFactoryData, sizeof(uniqueIdStoreInFile)) == 0;
+    return uniqueIdsMatch ? CHIP_NO_ERROR : CHIP_ERROR_INCORRECT_STATE;
+#else
+    /* When use Ayla adm provider, do nothing */
+    return CHIP_NO_ERROR;
+#endif
+}
+
+CHIP_ERROR ConfigurationManagerImpl::StoreUniqueId(const char * uniqueId, size_t uniqueIdLen)
+{
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE || 1
+    return SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_UniqueId, uniqueId, uniqueIdLen);
+#else
+    /* When use Ayla adm provider, do nothing */
+    return CHIP_NO_ERROR;
+#endif
+}
+
+CHIP_ERROR ConfigurationManagerImpl::GenerateUniqueId(char * buf, size_t bufSize)
+{
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE || 1
+    uint8_t uniqueId[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
+    CHIP_ERROR err = LoadFactoryUniqueId(uniqueId);
+
+    ReturnErrorCodeIf(bufSize <= BASE64_ENCODED_LEN(sizeof(uniqueId)), CHIP_ERROR_BUFFER_TOO_SMALL);
+
+    if (err == CHIP_NO_ERROR)
+    {
+        ChipLogError(DeviceLayer, "Loaded unique ID from factory flash");
+    }
+    else
+    {
+        constexpr uint8_t kMacDerivedUniqueIdPrefix[4] = { 0x15, 0xfe, 0x16, 0x12 };
+        uint8_t wlanMac[6];
+
+        ChipLogError(DeviceLayer, "Loading unique ID from factory flash failed: %s; fallback to MAC-derived unique ID",
+                     ErrorStr(err));
+        memcpy(uniqueId, kMacDerivedUniqueIdPrefix, sizeof(kMacDerivedUniqueIdPrefix));
+
+        ReturnErrorOnFailure(chip::DeviceLayer::ConfigurationMgrImpl().GetPrimaryWiFiMACAddress(wlanMac));
+        memcpy(uniqueId + 4, wlanMac, sizeof(wlanMac));
+        memcpy(uniqueId + 10, wlanMac, sizeof(wlanMac));
+    }
+
+    const uint8_t len = chip::Base64Encode32(uniqueId, sizeof(uniqueId), buf);
+    ReturnErrorCodeIf(static_cast<size_t>(len) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    buf[len] = '\0';
+    ChipLogError(DeviceLayer, "Generated unique ID: %s", buf);
+    return CHIP_NO_ERROR;
+#else
+    /* When use Ayla adm provider, do nothing */
+    return CHIP_NO_ERROR;
+#endif
 }
 
 } // namespace DeviceLayer

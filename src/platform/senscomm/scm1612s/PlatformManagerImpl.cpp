@@ -111,7 +111,7 @@ wise_err_t PlatformManagerImpl::WiseEventHandler(void * ctx, system_event_t * ev
     {
         e.Type = DeviceEventType::kSCMSystemEvent;
         memcpy(&e.Platform.SCMSystemEvent.event, event, sizeof(*event));
-        ChipLogError(DeviceLayer, "event %d", event->event_id);
+        // ChipLogError(DeviceLayer, "event %d", event->event_id);
         (void) sInstance.PostEvent(&e);
 
         return WISE_OK;

@@ -24,7 +24,13 @@
 
 #include "FactoryDataProvider.h"
 
+#if CHIP_ENABLE_ADDITIONAL_DATA_ADVERTISING
+/* for debug */
+#include <setup_payload/AdditionalDataPayloadGenerator.h>
+#endif
+
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+#include <platform/ConfigurationManager.h>
 #include <scm_flash.h>
 #include <stddef.h>
 #else
@@ -65,6 +71,7 @@ CHIP_ERROR LoadKeypairFromRaw(ByteSpan privateKey, ByteSpan publicKey, Crypto::P
 #define SCM_FACTORY_DATA_OFFSET_HDR             (0x0400)
 #define DAC_PRIVATE_KEY_USEAGE_SZIE             (32)
 
+/* Left 161 Bytes */
 struct factoryDataMatterLayout
 {
     uint32_t magic;
@@ -78,7 +85,9 @@ struct factoryDataMatterLayout
     uint8_t saltLen;
     uint8_t verifierLen;
     uint8_t passcodeLen;
-    uint8_t reserved[47];
+    uint8_t uniqueIdLen;
+    uint8_t snLen;
+    uint8_t reserved[45];
 
     uint8_t cd[Credentials::kMaxCHIPCertLength];
     uint8_t dac[Credentials::kMaxDERCertLength];
@@ -93,6 +102,9 @@ struct factoryDataMatterLayout
     uint8_t salt[32];
     uint8_t verifier[97];
     uint32_t passcode;
+    /* Use Default UniqueID Len */
+    uint8_t uniqueID[16];
+    uint8_t serialNum[20];
 } __packed;
 #else
 CHIP_ERROR GenerateMacHash(const uint8_t mac[6], uint8_t hash[SCM_HASH_LEN])
@@ -227,6 +239,40 @@ uint8_t scm_onboard_autogen_internal()
     return 0;
 }
 #endif
+
+CHIP_ERROR LoadUniqueIdFromFactoryData(MutableByteSpan & uniqueIdSpan)
+{
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    int ret;
+    off_t offset;
+    uint8_t uniqueId[16] = {0};
+    uint8_t uniqueIDLen;
+
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, uniqueIdLen);
+    ret    = scm_partition_read(FLASH_PARTITION_FACTORY, offset, &uniqueIDLen, sizeof(uniqueIDLen));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    if (uniqueIDLen == 0 || uniqueIDLen == 0xFF) {
+#ifdef CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID
+        constexpr uint8_t uniqueIdDeault[] = CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID;
+#else
+        constexpr uint8_t uniqueIdDeault[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+#endif
+        memcpy(uniqueId, uniqueIdDeault, sizeof(uniqueId));
+    } else {
+        offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, uniqueID);
+        ret    = scm_partition_read(FLASH_PARTITION_FACTORY, offset, reinterpret_cast<uint8_t *>(&uniqueId), sizeof(uniqueId));
+        ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+    }
+
+    VerifyOrReturnValue(uniqueIdSpan.size() >= sizeof(uniqueId), CHIP_ERROR_INVALID_ARGUMENT);
+    memcpy(uniqueIdSpan.data(), uniqueId, sizeof(uniqueId));
+    uniqueIdSpan.reduce_size(sizeof(uniqueId));
+    return CHIP_NO_ERROR;
+#else
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+#endif
+}
 
 CHIP_ERROR FactoryDataProvider::Init()
 {
@@ -767,6 +813,27 @@ CHIP_ERROR FactoryDataProvider::GetProductId(uint16_t & productId)
 
 CHIP_ERROR FactoryDataProvider::GetPartNumber(char * buf, size_t bufSize)
 {
+    /* use for rotatingID debugs */
+#if CHIP_ENABLE_ADDITIONAL_DATA_ADVERTISING
+    CHIP_ERROR err;
+    char rotatingDeviceIdHexBuffer[RotatingDeviceId::kHexMaxLength];
+    size_t rotatingDeviceIdValueOutputSize = 0;
+    AdditionalDataPayloadGeneratorParams additionalDataPayloadParams;
+    additionalDataPayloadParams.rotatingDeviceIdLifetimeCounter = 10;
+
+    uint8_t rotatingDeviceIdUniqueId[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
+    MutableByteSpan rotatingDeviceIdUniqueIdSpan(rotatingDeviceIdUniqueId);
+
+    err = DeviceLayer::GetDeviceInstanceInfoProvider()->GetRotatingDeviceIdUniqueId(rotatingDeviceIdUniqueIdSpan);
+    additionalDataPayloadParams.rotatingDeviceIdUniqueId = rotatingDeviceIdUniqueIdSpan;
+    err = AdditionalDataPayloadGenerator().generateRotatingDeviceIdAsHexString(additionalDataPayloadParams, 
+            rotatingDeviceIdHexBuffer, ArraySize(rotatingDeviceIdHexBuffer),rotatingDeviceIdValueOutputSize);
+
+    printf("rotatingDeviceIdHexBuffer:%s\n", rotatingDeviceIdHexBuffer);
+    SuccessOrExit(err);
+exit:
+    return CHIP_NO_ERROR;
+#endif
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
     int len = 0;
 
@@ -836,17 +903,40 @@ CHIP_ERROR FactoryDataProvider::GetProductLabel(char * buf, size_t bufSize)
 CHIP_ERROR FactoryDataProvider::GetSerialNumber(char * buf, size_t bufSize)
 {
 #if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
-    /* For Ayla related projects, we use Ayla DSN as SN. */
     int ret;
     off_t offset;
-    uint8_t ayla_dsn[20];
+    uint8_t scmSN[20] = {0};
+    uint8_t scmSNLen;
+    char snSrc[12] = {0};
 
-    /* ayla oem offset : 0x0000, dsn offset : 0x0 */
-    offset = 0x0000 + 0x0;
-    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, ayla_dsn, sizeof(ayla_dsn));
-    /* bufSize = kMaxSerialNumberLength + 1 is enough. */
-    memcpy(buf, ayla_dsn, 20);
-    ChipLogError(DeviceLayer, "SerialNumber (Ayla DSN): %s", buf);
+    /* 1. Get sn len from flash */
+    offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, snLen);
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, &scmSNLen, sizeof(scmSNLen));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    ChipLogProgress(DeviceLayer, "SerialNumber(SCM) len: %u", scmSNLen);
+
+    if (scmSNLen == 0 || scmSNLen == 0xFF) {
+        /* use ayla dsn as scm sn */
+        offset = 0x0000 + 0x0;
+        strcpy(snSrc, "Ayla DSN");
+    } else {
+        /* use sn stored in matter section  */
+        offset = SCM_FACTORY_DATA_OFFSET_HDR + offsetof(struct factoryDataMatterLayout, serialNum);
+        strcpy(snSrc, "SCM SN");
+    }
+
+    ret = scm_partition_read(FLASH_PARTITION_FACTORY, offset, scmSN, sizeof(scmSN));
+    ReturnErrorCodeIf(ret, CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND);
+
+    if (scmSN[0] == 0xFF && scmSN[1] == 0xFF && scmSN[2] == 0xFF) {
+        strncpy(buf, CHIP_DEVICE_CONFIG_TEST_SERIAL_NUMBER, bufSize);
+    } else {
+        /* bufSize = kMaxSerialNumberLength + 1 is enough. */
+        memcpy(buf, scmSN, 20);
+    }
+    ChipLogProgress(DeviceLayer, "SerialNumber (%s): %s", snSrc, buf);
+
     return CHIP_NO_ERROR;
 #else
     strncpy(buf, CHIP_DEVICE_CONFIG_TEST_SERIAL_NUMBER, bufSize);
@@ -937,23 +1027,14 @@ CHIP_ERROR FactoryDataProvider::GetHardwareVersionString(char * buf, size_t bufS
 
 CHIP_ERROR FactoryDataProvider::GetRotatingDeviceIdUniqueId(MutableByteSpan & uniqueIdSpan)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE && 0
-    int len = 0;
-
-    len = mfd_getRotatingDeviceIdUniqueId(uniqueIdSpan.data(), uniqueIdSpan.size());
-    if (len > 0)
-    {
-        return CHIP_NO_ERROR;
-    }
-    else if (0 == len)
-    {
-        return CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
-    }
-
-    return CHIP_ERROR_BUFFER_TOO_SMALL;
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
+    return LoadUniqueIdFromFactoryData(uniqueIdSpan);
 #else
-    constexpr uint8_t uniqueId[] = CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID;
-
+#ifdef CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID
+        constexpr uint8_t uniqueId[] = CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID;
+#else
+        constexpr uint8_t uniqueId[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+#endif
     VerifyOrReturnValue(uniqueIdSpan.size() >= sizeof(uniqueId), CHIP_ERROR_INVALID_ARGUMENT);
 
     memcpy(uniqueIdSpan.data(), uniqueId, sizeof(uniqueId));
