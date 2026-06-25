@@ -18,7 +18,7 @@ import("${chip_root}/build/chip/buildconfig_header.gni")
 
 declare_args() {
   # Enable adding optional rotating device id to the additional data.
-  chip_enable_rotating_device_id = false
+  chip_enable_rotating_device_id = true
 }
 
 buildconfig_header("additional_data_payload_buildconfig") {

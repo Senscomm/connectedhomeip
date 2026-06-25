@@ -229,7 +229,7 @@ CHIP_ERROR BLEManagerImpl::_Init()
 
     PlatformMgr().ScheduleWork(DriveBLEState, 0);
     /* Note: This workaround may be removed. */
-    // StartBleAdvWatchTimer(6000);
+    StartBleAdvWatchTimer(6000);
 exit:
     return err;
 }
@@ -1010,7 +1010,7 @@ CHIP_ERROR BLEManagerImpl::InitSCMBleLayer(void)
 
     /* Set BLE Host task prio 4 and stack_size max (4096), related fixes need to be synced in npl_freertos_task_init */
 	ble_npl_task_init(&s_task_host, "nimble_host", bleprph_host_task,
-			NULL, 4, 0, NULL, 4096);
+			NULL, 7, 0, NULL, 4096);
 
     xSemaphoreTake(semaphoreHandle, portMAX_DELAY);
     vSemaphoreDelete(semaphoreHandle);
