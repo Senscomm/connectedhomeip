@@ -769,14 +769,14 @@ void BLEManagerImpl::DriveBLEState(void)
         }
     }
 
-    /* Scanning always ON */
-    if (!fBleScanOn)
-    {
-        if (!adb_bt_scan_start_wrap())
-        {
-            fBleScanOn = 1;
-        }
-    }
+    // /* Scanning always ON */
+    // if (!fBleScanOn)
+    // {
+    //     if (!adb_bt_scan_start_wrap())
+    //     {
+    //         fBleScanOn = 1;
+    //     }
+    // }
 
     // If the application has enabled CHIPoBLE and BLE advertising...
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled &&
@@ -1755,14 +1755,14 @@ CHIP_ERROR BLEManagerImpl::StartAdvertising(void)
 #endif
     }
 
-    ChipLogProgress(DeviceLayer, "Configuring CHIPoBLE advertising (interval %" PRIu32 " ms, %sconnectable)",
-                    (((uint32_t) adv_params.itvl_min) * 10) / 16, (connectable) ? "" : "non-");
+    // ChipLogProgress(DeviceLayer, "Configuring CHIPoBLE advertising (interval %" PRIu32 " ms, %sconnectable)",
+    //                 (((uint32_t) adv_params.itvl_min) * 10) / 16, (connectable) ? "" : "non-");
 
     {
         if (ble_gap_adv_active())
         {
             /* Advertising is already active. Stop and restart with the new parameters */
-            ChipLogProgress(DeviceLayer, "Device already advertising, stop active advertisement and restart");
+            // ChipLogProgress(DeviceLayer, "Device already advertising, stop active advertisement and restart");
             err = MapBLEError(ble_gap_adv_stop());
             if (err != CHIP_NO_ERROR)
             {

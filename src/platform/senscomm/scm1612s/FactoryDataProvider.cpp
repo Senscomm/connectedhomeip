@@ -819,16 +819,17 @@ CHIP_ERROR FactoryDataProvider::GetPartNumber(char * buf, size_t bufSize)
     char rotatingDeviceIdHexBuffer[RotatingDeviceId::kHexMaxLength];
     size_t rotatingDeviceIdValueOutputSize = 0;
     AdditionalDataPayloadGeneratorParams additionalDataPayloadParams;
-    additionalDataPayloadParams.rotatingDeviceIdLifetimeCounter = 10;
 
     uint8_t rotatingDeviceIdUniqueId[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
     MutableByteSpan rotatingDeviceIdUniqueIdSpan(rotatingDeviceIdUniqueId);
 
     err = DeviceLayer::GetDeviceInstanceInfoProvider()->GetRotatingDeviceIdUniqueId(rotatingDeviceIdUniqueIdSpan);
     additionalDataPayloadParams.rotatingDeviceIdUniqueId = rotatingDeviceIdUniqueIdSpan;
+    ReturnErrorOnFailure(
+        chip::DeviceLayer::ConfigurationMgr().GetLifetimeCounter(additionalDataPayloadParams.rotatingDeviceIdLifetimeCounter));
     err = AdditionalDataPayloadGenerator().generateRotatingDeviceIdAsHexString(additionalDataPayloadParams, 
             rotatingDeviceIdHexBuffer, ArraySize(rotatingDeviceIdHexBuffer),rotatingDeviceIdValueOutputSize);
-
+    printf("rotatingDeviceIdLifetimeCounter:%u\n", additionalDataPayloadParams.rotatingDeviceIdLifetimeCounter);
     printf("rotatingDeviceIdHexBuffer:%s\n", rotatingDeviceIdHexBuffer);
     SuccessOrExit(err);
 exit:

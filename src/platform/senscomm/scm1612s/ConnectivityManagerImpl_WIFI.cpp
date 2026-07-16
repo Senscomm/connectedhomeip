@@ -113,6 +113,7 @@ CHIP_ERROR ConnectivityManagerImpl::InitWiFi(void)
         {
             ChipLogProgress(DeviceLayer, "WiFi start fail");
         }
+        NetworkCommissioning::WiseWiFiDriver::GetInstance().ConfigureInitialScan(2);
         err = CHIP_NO_ERROR;
         SuccessOrExit(err);
 #endif
@@ -182,13 +183,28 @@ void ConnectivityManagerImpl::_OnWiFiPlatformEvent(const ChipDeviceEvent * event
     switch (event->Platform.SCMSystemEvent.event.event_id)
     {
     case SYSTEM_EVENT_SCAN_DONE:
+    {
         ChipLogProgress(DeviceLayer, "SYSTEM_EVENT_SCAN_DONE");
-        NetworkCommissioning::WiseWiFiDriver::GetInstance().OnScanWiFiNetworkDone();
+        auto & wifiDriver = NetworkCommissioning::WiseWiFiDriver::GetInstance();
+        const bool wasBlockingConnections = wifiDriver.IsInitialScanBlockingConnections();
+        wifiDriver.OnScanWiFiNetworkDone();
+        if (wasBlockingConnections && !wifiDriver.IsInitialScanBlockingConnections())
+        {
+            // DriveStationState();
+            wifiDriver.ConnectSavedNetwork();
+        }
         break;
+    }
     case SYSTEM_EVENT_STA_START:
-        ChipLogProgress(DeviceLayer, "SYSTEM_EVENT_STA_START");
-        DriveStationState();
+    {
+        ChipLogError(DeviceLayer, "SYSTEM_EVENT_STA_START");
+        auto & wifiDriver = NetworkCommissioning::WiseWiFiDriver::GetInstance();
+        if (!wifiDriver.StartInitialScanOnStationStart())
+        {
+            DriveStationState();
+        }
         break;
+    }
     case SYSTEM_EVENT_STA_CONNECTED:
         ChipLogProgress(DeviceLayer, "SYSTEM_EVENT_STA_CONNECTED");
         if (mWiFiStationState == kWiFiStationState_Connecting)

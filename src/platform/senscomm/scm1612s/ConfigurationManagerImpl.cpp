@@ -172,7 +172,8 @@ CHIP_ERROR ConfigurationManagerImpl::ReadPersistedStorageValue(::chip::Platform:
                                                                uint32_t & value)
 {
     CHIP_ERROR err;
-    SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, (char *) &persistedStorageKey };
+    // SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, (char *) &persistedStorageKey };
+    SCM1612SConfig::Key configKey{ SCM1612SConfig::kConfigNamespace_ChipCounters, persistedStorageKey };
 
     err = ReadConfigValue(configKey, value);
     if (err == CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND)

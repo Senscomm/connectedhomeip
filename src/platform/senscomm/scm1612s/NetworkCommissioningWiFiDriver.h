@@ -116,10 +116,14 @@ public:
                               uint8_t & outNetworkIndex) override;
     void ScanNetworks(ByteSpan ssid, ScanCallback * callback) override;
 
+    CHIP_ERROR ConnectSavedNetwork();
     CHIP_ERROR ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen, const char * key, uint8_t keyLen);
 
     void OnConnectWiFiNetwork();
     void OnScanWiFiNetworkDone();
+    void ConfigureInitialScan(uint8_t scanRounds);
+    bool StartInitialScanOnStationStart();
+    bool IsInitialScanBlockingConnections() const;
     void UpdateWiFiAuthmode();
     CHIP_ERROR SetLastDisconnectReason(const ChipDeviceEvent * event);
     int16_t GetLastDisconnectReason();
@@ -132,12 +136,19 @@ public:
 private:
     bool NetworkMatch(const WiFiNetwork & network, ByteSpan networkId);
     bool StartScanWiFiNetworks(ByteSpan ssid);
+    bool StartNextInitialScanRound();
+    void ClearInitialScanState();
 
     WiFiNetwork mSavedNetwork   = {};
     WiFiNetwork mStagingNetwork = {};
-    ScanCallback * mpScanCallback;
-    ConnectCallback * mpConnectCallback;
-    int16_t lastDisconnectedReason;
+    ScanCallback * mpScanCallback        = nullptr;
+    ConnectCallback * mpConnectCallback  = nullptr;
+    int16_t lastDisconnectedReason       = 0;
+    bool EnableInitialScan               = true;
+    bool InitialScanTriggered            = false;
+    bool InitialScanInProgress           = false;
+    uint8_t InitialScanCnt               = 2;
+    bool EnableInitConnect               = false;
 };
 
 } // namespace NetworkCommissioning

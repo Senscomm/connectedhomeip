@@ -21,15 +21,15 @@
 #include <platform/senscomm/scm1612s/SCM1612SConfig.h>
 #include <platform/senscomm/scm1612s/NetworkCommissioningWiFiDriver.h>
 
+#include "ada/err.h"
+#include "ayla/utypes.h"
+#include "adb/adb.h"
+
 #include "wise_event_loop.h"
 #include "wise_wifi_types.h"
 #include "wise_err.h"
 #include "scm_wifi.h"
 #include "wise_wifi.h"
-
-extern "C" uint8_t demo_get_scan_source(void);
-extern "C" void demo_set_scan_source(uint8_t);
-extern "C" void demo_set_inital_scan(bool);
 
 #define SECURITY_OPEN 0
 #define SECURITY_TKIP 2
@@ -49,6 +49,7 @@ constexpr char kWiFiSSIDKeyName[]        = "wifi-ssid";
 constexpr char kWiFiCredentialsKeyName[] = "wifi-pass";
 static uint8_t WiFiSSIDStr[DeviceLayer::Internal::kMaxWiFiSSIDLength];
 constexpr uint16_t kMaxCachedWiFiScanAPs = kMaxWiFiScanAPs;
+static uint8_t totalScanRounds;
 
 struct CachedWiFiScanResults
 {
@@ -140,7 +141,7 @@ void MergeWiFiScanResults(const scm_wifi_ap_info * apListBuffer, uint16_t count)
 
 void LogCachedWiFiScanResults()
 {
-    ChipLogError(DeviceLayer, "Cached WiFi scan results: valid=%d count=%u", gCachedWiFiScanResults.mValid,
+    ChipLogError(DeviceLayer, "Cached WiFi scan results: round=%u valid=%d count=%u", totalScanRounds, gCachedWiFiScanResults.mValid,
                     gCachedWiFiScanResults.mCount);
 
     for (uint16_t index = 0; index < gCachedWiFiScanResults.mCount; ++index)
@@ -230,10 +231,73 @@ CHIP_ERROR WiseWiFiDriver::Init(NetworkStatusChangeCallback * networkStatusChang
     mSavedNetwork.credentialsLen = credentialsLen;
     mSavedNetwork.ssidLen        = ssidLen;
     mStagingNetwork              = mSavedNetwork;
-    // avoid inital wifi scan if wifi configs saved
-    demo_set_inital_scan(false);
+
+    if (IsInitialScanBlockingConnections())
+    {
+        EnableInitConnect = true;
+        ChipLogProgress(NetworkProvisioning, "Deferring WiFi connect until initial scan completes");
+        return CHIP_NO_ERROR;
+    }
+
     ConnectWiFiNetwork(mSavedNetwork.ssid, ssidLen, mSavedNetwork.credentials, credentialsLen);
     return err;
+}
+
+void WiseWiFiDriver::ConfigureInitialScan(uint8_t scanRounds)
+{
+    EnableInitialScan     = (scanRounds > 0);
+    InitialScanTriggered  = false;
+    InitialScanInProgress = false;
+    InitialScanCnt        = scanRounds;
+    totalScanRounds = scanRounds;
+}
+
+bool WiseWiFiDriver::IsInitialScanBlockingConnections() const
+{
+    return EnableInitialScan;
+}
+
+void WiseWiFiDriver::ClearInitialScanState()
+{
+    EnableInitialScan     = false;
+    InitialScanTriggered  = true;
+    InitialScanInProgress = false;
+    InitialScanCnt        = 0;
+    adb_bt_scan_start_wrap();
+}
+
+bool WiseWiFiDriver::StartNextInitialScanRound()
+{
+    VerifyOrReturnValue(EnableInitialScan && InitialScanCnt > 0, false);
+
+    wifi_scan_config_t scanConfig = {};
+
+    // ChipLogError(NetworkProvisioning, "Start initial WiFi scan, rounds left after this: %u", InitialScanCnt);
+
+    scanConfig.scan_type            = WIFI_SCAN_TYPE_ACTIVE;
+    scanConfig.scan_time.active.min = 100;
+    scanConfig.scan_time.active.max = 130;
+
+    if (wise_wifi_scan_start(&scanConfig, true, WIFI_IF_STA) != WISE_OK)
+    {
+        ChipLogError(NetworkProvisioning, "Initial WiFi scan start failed");
+        ClearInitialScanState();
+        return false;
+    }
+
+    InitialScanInProgress = true;
+    return true;
+}
+
+bool WiseWiFiDriver::StartInitialScanOnStationStart()
+{
+    if (!EnableInitialScan || InitialScanTriggered)
+    {
+        return false;
+    }
+
+    InitialScanTriggered = true;
+    return StartNextInitialScanRound();
 }
 
 CHIP_ERROR WiseWiFiDriver::CommitConfiguration()
@@ -357,6 +421,17 @@ Status WiseWiFiDriver::ReorderNetwork(ByteSpan networkId, uint8_t index, Mutable
     return Status::kSuccess;
 }
 
+CHIP_ERROR WiseWiFiDriver::ConnectSavedNetwork()
+{
+    if (EnableInitConnect)
+    {
+        EnableInitConnect = false;
+        return ConnectWiFiNetwork(mSavedNetwork.ssid, mSavedNetwork.ssidLen, mSavedNetwork.credentials, mSavedNetwork.credentialsLen);
+    }
+
+    return CHIP_NO_ERROR;
+}
+
 CHIP_ERROR WiseWiFiDriver::ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen, const char * key, uint8_t keyLen)
 {
     scm_wifi_assoc_request req = {0};
@@ -364,7 +439,8 @@ CHIP_ERROR WiseWiFiDriver::ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen
     scm_wifi_fast_assoc_request fast_request = {0};
     const scm_wifi_ap_info * cachedApInfo = nullptr;
     int ret;
-    ChipLogProgress(NetworkProvisioning, "WiseWiFiDriver::ConnectWiFiNetwork");
+    ChipLogError(NetworkProvisioning, "WiseWiFiDriver::ConnectWiFiNetwork");
+    VerifyOrReturnError(!IsInitialScanBlockingConnections(), CHIP_ERROR_INCORRECT_STATE);
 
     ReturnErrorOnFailure(ConnectivityMgr().SetWiFiStationMode(ConnectivityManager::kWiFiStationMode_Enabled));
 
@@ -544,7 +620,6 @@ bool WiseWiFiDriver::StartScanWiFiNetworks(ByteSpan ssid)
         else
         {
             scm_wifi_sta_scan();
-            demo_set_scan_source(3);
         }
     }
 
@@ -558,7 +633,7 @@ void WiseWiFiDriver::OnScanWiFiNetworkDone()
     if (!GetInstance().mpScanCallback)
     {
         ChipLogProgress(DeviceLayer, "No scan callback");
-        if (demo_get_scan_source() == 1)
+        if (GetInstance().EnableInitialScan)
         {
             std::array<scm_wifi_ap_info, kMaxWiFiScanAPs> apBuffer = {};
 
@@ -567,12 +642,30 @@ void WiseWiFiDriver::OnScanWiFiNetworkDone()
                 MergeWiFiScanResults(apBuffer.data(), apNumber);
                 ChipLogProgress(DeviceLayer, "Merged %u WiFi scan results without callback, cache count=%u", apNumber,
                                 gCachedWiFiScanResults.mCount);
-                LogCachedWiFiScanResults();
             }
             else
             {
                 ChipLogError(DeviceLayer, "Failed to cache WiFi scan results without callback");
                 InvalidateCachedWiFiScanResults();
+            }
+
+            if (GetInstance().InitialScanCnt > 0)
+            {
+                GetInstance().InitialScanCnt--;
+            }
+
+            if (GetInstance().InitialScanCnt > 0)
+            {
+                if (!GetInstance().StartNextInitialScanRound())
+                {
+                    ChipLogError(DeviceLayer, "Failed to continue initial WiFi scan");
+                }
+            }
+            else
+            {
+                LogCachedWiFiScanResults();
+                ChipLogProgress(DeviceLayer, "Initial WiFi scan completed");
+                GetInstance().ClearInitialScanState();
             }
         }
         return;
