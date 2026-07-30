@@ -53,6 +53,9 @@
 #include "ada/err.h"
 #include "ayla/utypes.h"
 #include "adb/adb.h"
+
+extern "C" int ble_hs_conn_can_alloc(void);
+
 /**
  * Apart from the "Matter" part in the broadcast, the remaining 16 bytes, len + type + name = 16, 
  * so the max length of "device name" is 14 bytes. Ayla svc id takes 4 bytes, and can be removed
@@ -1725,6 +1728,20 @@ CHIP_ERROR BLEManagerImpl::StartAdvertising(void)
     // Advertise connectable if we haven't reached the maximum number of connections.
     size_t numCons       = _NumConnections();
     bool connectable     = (numCons < kMaxConnections);
+    if (!ble_hs_conn_can_alloc())
+    {
+        ChipLogError(DeviceLayer, "BLE can not alloc extra conn, stop adv.");
+        if (ble_gap_adv_active())
+        {
+            err = MapBLEError(ble_gap_adv_stop());
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(DeviceLayer, "ble_gap_adv_stop() failed: %s, cannot restart", ErrorStr(err));
+                return err;
+            }
+        }
+        return CHIP_NO_ERROR;
+    }
     adv_params.conn_mode = connectable ? BLE_GAP_CONN_MODE_UND : BLE_GAP_CONN_MODE_NON;
 
     // Advertise in fast mode if it is connectable advertisement and
