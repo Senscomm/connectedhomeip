@@ -16,6 +16,7 @@
  */
 
 #include <app/server/Dnssd.h>
+#include <app/server/Server.h>
 
 #include <app-common/zap-generated/cluster-enums.h>
 #include <inttypes.h>
@@ -47,13 +48,20 @@ namespace chip {
 namespace app {
 namespace {
 
+constexpr FabricIndex kPrimaryFabricIndex   = 1;
+constexpr FabricIndex kFailSafeFabricIndex  = 2;
+constexpr uint8_t kMaxFailSafeDnssdAttempts = 3;
+constexpr uint16_t kFailSafeDnssdDelaySeconds = 4;
+
 void OnPlatformEvent(const DeviceLayer::ChipDeviceEvent * event)
 {
     switch (event->Type)
     {
     case DeviceLayer::DeviceEventType::kDnssdInitialized:
-    case DeviceLayer::DeviceEventType::kDnssdRestartNeeded:
         app::DnssdServer::Instance().StartServer();
+        break;
+    case DeviceLayer::DeviceEventType::kDnssdRestartNeeded:
+        app::DnssdServer::Instance().HandleDnssdRestartNeeded();
         break;
     default:
         break;
@@ -197,6 +205,32 @@ CHIP_ERROR DnssdServer::AdvertiseOperational()
             continue;
         }
 
+        if (fabricInfo.GetFabricIndex() != kPrimaryFabricIndex &&
+            (fabricInfo.GetFabricIndex() != kFailSafeFabricIndex || !mHandlingDnssdRestart))
+        {
+            if (fabricInfo.GetFabricIndex() == kFailSafeFabricIndex)
+            {
+                auto & failSafeContext = Server::GetInstance().GetFailSafeContext();
+                if (failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex) && !mDnssdRestartNeededPending)
+                {
+                    ChipDeviceEvent event;
+                    event.Type = DeviceEventType::kDnssdRestartNeeded;
+                    mDnssdRestartNeededPending = true;
+                    CHIP_ERROR error = DeviceLayer::PlatformMgr().PostEvent(&event);
+                    if (error != CHIP_NO_ERROR)
+                    {
+                        mDnssdRestartNeededPending = false;
+                        ChipLogError(Discovery, "Failed to post kDnssdRestartNeeded: %" CHIP_ERROR_FORMAT, error.Format());
+                    }
+                    else
+                    {
+                        ChipLogProgress(Discovery, "Posted kDnssdRestartNeeded for fail-safe fabric index %u", static_cast<unsigned>(kFailSafeFabricIndex));
+                    }
+                }
+            }
+            continue;
+        }
+
         uint8_t macBuffer[DeviceLayer::ConfigurationManager::kPrimaryMACAddressLength];
         MutableByteSpan mac(macBuffer);
         GetPrimaryOrFallbackMACAddress(mac);
@@ -223,6 +257,75 @@ CHIP_ERROR DnssdServer::AdvertiseOperational()
         ReturnErrorOnFailure(mdnsAdvertiser.Advertise(advertiseParameters));
     }
     return CHIP_NO_ERROR;
+}
+
+void DnssdServer::HandleDnssdRestartNeeded()
+{
+    mDnssdRestartNeededPending = false;
+    auto & failSafeContext     = Server::GetInstance().GetFailSafeContext();
+    if (!failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex))
+    {
+        StartServer();
+        return;
+    }
+
+    if (mFailSafeDnssdTimerArmed || mFailSafeDnssdAttempts >= kMaxFailSafeDnssdAttempts)
+    {
+        ChipLogProgress(Discovery, "Ignore kDnssdRestartNeeded: timerArmed=%u attempts=%u/%u",
+                        mFailSafeDnssdTimerArmed ? 1 : 0, static_cast<unsigned>(mFailSafeDnssdAttempts),
+                        static_cast<unsigned>(kMaxFailSafeDnssdAttempts));
+        return;
+    }
+
+    ChipLogProgress(Discovery, "Delay kDnssdRestartNeeded handling by %us, attempt %u/%u",
+                    static_cast<unsigned>(kFailSafeDnssdDelaySeconds), static_cast<unsigned>(mFailSafeDnssdAttempts + 1),
+                    static_cast<unsigned>(kMaxFailSafeDnssdAttempts));
+    mFailSafeDnssdTimerArmed =
+        DeviceLayer::SystemLayer().StartTimer(System::Clock::Seconds16(kFailSafeDnssdDelaySeconds),
+                                              HandleFailSafeDnssdRestartTimer, this) == CHIP_NO_ERROR;
+    if (!mFailSafeDnssdTimerArmed)
+    {
+        ChipLogError(Discovery, "Failed to start delayed kDnssdRestartNeeded handling timer");
+    }
+}
+
+void DnssdServer::HandleFailSafeDnssdRestartTimer(System::Layer * systemLayer, void * appState)
+{
+    (void) systemLayer;
+    static_cast<DnssdServer *>(appState)->OnFailSafeDnssdRestartTimer();
+}
+
+void DnssdServer::OnFailSafeDnssdRestartTimer()
+{
+    mFailSafeDnssdTimerArmed = false;
+
+    auto & failSafeContext = Server::GetInstance().GetFailSafeContext();
+    if (!failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex) || mFailSafeDnssdAttempts >= kMaxFailSafeDnssdAttempts)
+    {
+        ChipLogProgress(Discovery, "Stop delayed DNS-SD restart: failSafeFabric2=%u attempts=%u/%u",
+                        failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex) ? 1 : 0,
+                        static_cast<unsigned>(mFailSafeDnssdAttempts), static_cast<unsigned>(kMaxFailSafeDnssdAttempts));
+        mFailSafeDnssdAttempts = 0;
+        return;
+    }
+
+    ++mFailSafeDnssdAttempts;
+    mHandlingDnssdRestart = true;
+    ChipLogProgress(Discovery, "Handle delayed DNS-SD restart attempt %u/%u",
+                    static_cast<unsigned>(mFailSafeDnssdAttempts), static_cast<unsigned>(kMaxFailSafeDnssdAttempts));
+    StartServer();
+    mHandlingDnssdRestart = false;
+
+    if (failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex) && mFailSafeDnssdAttempts < kMaxFailSafeDnssdAttempts)
+    {
+        HandleDnssdRestartNeeded();
+    }
+    else
+    {
+        ChipLogProgress(Discovery, "Completed delayed DNS-SD restart attempts: %u",
+                        static_cast<unsigned>(mFailSafeDnssdAttempts));
+        mFailSafeDnssdAttempts = 0;
+    }
 }
 
 CHIP_ERROR DnssdServer::Advertise(bool commissionableNode, chip::Dnssd::CommissioningMode mode)
@@ -398,6 +501,12 @@ void DnssdServer::StopServer()
 {
     // Make sure we don't hold on to a dangling fabric table pointer.
     mFabricTable = nullptr;
+
+    DeviceLayer::SystemLayer().CancelTimer(HandleFailSafeDnssdRestartTimer, this);
+    mDnssdRestartNeededPending = false;
+    mHandlingDnssdRestart      = false;
+    mFailSafeDnssdTimerArmed   = false;
+    mFailSafeDnssdAttempts     = 0;
 
     DeviceLayer::PlatformMgr().RemoveEventHandler(OnPlatformEventWrapper, 0);
 

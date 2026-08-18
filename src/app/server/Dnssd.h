@@ -106,6 +106,11 @@ public:
     /// (Re-)starts the Dnssd server, using the provided commissioning mode.
     void StartServer(Dnssd::CommissioningMode mode);
 
+    /// Handles a DNS-SD restart event posted while fail-safe is armed for fabric index 2.
+    void HandleDnssdRestartNeeded();
+    static void HandleFailSafeDnssdRestartTimer(System::Layer * systemLayer, void * appState);
+    void OnFailSafeDnssdRestartTimer();
+
     //// Stop the Dnssd server.  After this call, SetFabricTable must be called
     //// again before calling StartServer().
     void StopServer();
@@ -170,6 +175,11 @@ private:
 
     // Ephemeral discriminator to use instead of the default if set
     Optional<uint16_t> mEphemeralDiscriminator;
+
+    bool mDnssdRestartNeededPending = false;
+    bool mHandlingDnssdRestart      = false;
+    bool mFailSafeDnssdTimerArmed   = false;
+    uint8_t mFailSafeDnssdAttempts  = 0;
 
 #if CHIP_DEVICE_CONFIG_ENABLE_EXTENDED_DISCOVERY
     Time::TimeSource<Time::Source::kSystem> mTimeSource;
