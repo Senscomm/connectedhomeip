@@ -367,6 +367,7 @@ void UDPEndPointImplLwIP::LwIPReceiveUDPMessage(void * arg, struct udp_pcb * pcb
     pktInfo->Interface   = InterfaceId(ip_current_netif());
     pktInfo->SrcPort     = port;
     pktInfo->DestPort    = pcb->local_port;
+    const uint16_t packetLen = buf->TotalLength();
 
     auto filterOutcome = EndpointQueueFilter::FilterOutcome::kAllowPacket;
     if (sQueueFilter != nullptr)
@@ -406,8 +407,16 @@ void UDPEndPointImplLwIP::LwIPReceiveUDPMessage(void * arg, struct udp_pcb * pcb
         if (sQueueFilter != nullptr)
         {
             (void) sQueueFilter->FilterAfterDequeue(ep, *(pktInfo.get()), buf);
-            ChipLogError(Inet, "Dequeue ERROR err = %" CHIP_ERROR_FORMAT, err.Format());
         }
+
+#if CHIP_SENSCOMM_EVENT_QUEUE_DIAGNOSTIC_LOGGING
+        ChipLogError(Inet,
+                     "UDP lambda enqueue failed: err=%" CHIP_ERROR_FORMAT " srcPort=%u dstPort=%u len=%u",
+                     err.Format(), static_cast<unsigned int>(port), static_cast<unsigned int>(pcb->local_port),
+                     static_cast<unsigned int>(packetLen));
+#else
+        ChipLogError(Inet, "Dequeue ERROR err = %" CHIP_ERROR_FORMAT, err.Format());
+#endif
 
         ep->mDelayReleaseCount--;
     }

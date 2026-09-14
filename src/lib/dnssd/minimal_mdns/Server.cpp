@@ -23,6 +23,10 @@
 #include <lib/dnssd/minimal_mdns/core/DnsHeader.h>
 #include <platform/CHIPDeviceLayer.h>
 
+#if CHIP_SYSTEM_CONFIG_USE_LWIP && !CHIP_SYSTEM_CONFIG_USE_OPEN_THREAD_ENDPOINT
+#include <lwip/netif.h>
+#endif
+
 namespace mdns {
 namespace Minimal {
 namespace {
@@ -139,6 +143,36 @@ chip::Inet::IPAddress Get(chip::Inet::IPAddressType addressType)
 
 } // namespace BroadcastIpAddresses
 
+void PrintInterfaceDetails(const chip::Inet::InterfaceId & interfaceId)
+{
+    char interfaceName[chip::Inet::InterfaceId::kMaxIfNameLength] = {};
+    if (interfaceId.GetInterfaceName(interfaceName, sizeof(interfaceName)) != CHIP_NO_ERROR)
+    {
+        snprintf(interfaceName, sizeof(interfaceName), "???");
+    }
+
+#if CHIP_SYSTEM_CONFIG_USE_LWIP && !CHIP_SYSTEM_CONFIG_USE_OPEN_THREAD_ENDPOINT
+    const struct netif * currentNetif = interfaceId.GetPlatformInterface();
+    if (currentNetif == nullptr)
+    {
+        printf("[wade] interface=%s, netif=null\n", interfaceName);
+        return;
+    }
+
+    printf("[wade] interface=%s, netif=%p, name=%c%c, num=%u, mtu=%u, flags=0x%02x, hwaddr_len=%u, hwaddr=",
+           interfaceName, static_cast<const void *>(currentNetif), currentNetif->name[0], currentNetif->name[1],
+           currentNetif->num, currentNetif->mtu, currentNetif->flags, currentNetif->hwaddr_len);
+    for (uint8_t index = 0; index < currentNetif->hwaddr_len; index++)
+    {
+        printf("%s%02x", index == 0 ? "" : ":", currentNetif->hwaddr[index]);
+    }
+    printf("\n");
+#else
+    printf("[wade] interface=%s, platform-interface-present=%s\n", interfaceName,
+           interfaceId.IsPresent() ? "yes" : "no");
+#endif
+}
+
 namespace {
 
 #if CHIP_ERROR_LOGGING
@@ -207,6 +241,50 @@ CHIP_ERROR ServerBase::Listen(chip::Inet::EndPointManager<chip::Inet::UDPEndPoin
 
     while (it->Next(&interfaceId, &addressType))
     {
+        // iteratorCount++;
+        // PrintInterfaceDetails(interfaceId);
+        // char interfaceName1[chip::Inet::InterfaceId::kMaxIfNameLength];
+        // if (interfaceId.GetInterfaceName(interfaceName1, sizeof(interfaceName1)) != CHIP_NO_ERROR)
+        // {
+        //     snprintf(interfaceName1, sizeof(interfaceName1), "???");
+        // }
+        // printf("[wade] Listen iterator %zu: InterfaceId name=%s, addressType:%d\n", iteratorCount, interfaceName1, addressType);
+
+        // [wade] Pre-check what would make JoinMulticastGroup fail below, and
+        // skip such interfaces BEFORE creating a UDP endpoint, to avoid wasting
+        // a pool slot and raising the pool high water mark. Loopback is already
+        // filtered out by the listen iterator.
+        //
+        // On LwIP, igmp_joingroup_netif / mld6_joingroup_netif reject netifs
+        // whose flags lack NETIF_FLAG_IGMP (IPv4) / NETIF_FLAG_MLD6 (IPv6),
+        // returning ERR_VAL. Check those flags up-front instead.
+#if CHIP_SYSTEM_CONFIG_USE_LWIP && !CHIP_SYSTEM_CONFIG_USE_OPEN_THREAD_ENDPOINT
+        const struct netif * netif = interfaceId.GetPlatformInterface();
+        if (netif == nullptr)
+        {
+            continue;
+        }
+
+#if INET_CONFIG_ENABLE_IPV4
+        if (addressType == chip::Inet::IPAddressType::kIPv4 && (netif->flags & NETIF_FLAG_IGMP) == 0)
+        {
+            continue;
+        }
+#endif // INET_CONFIG_ENABLE_IPV4
+
+        if (addressType == chip::Inet::IPAddressType::kIPv6 && (netif->flags & NETIF_FLAG_MLD6) == 0)
+        {
+            continue;
+        }
+#else  // CHIP_SYSTEM_CONFIG_USE_LWIP && !CHIP_SYSTEM_CONFIG_USE_OPEN_THREAD_ENDPOINT
+        // Non-LwIP fallback: skip route ("rt") interfaces by name.
+        if (strncmp(interfaceName1, "rt", 2) == 0)
+        {
+            printf("[wade] Skip route interface %s, addressType=%d\n", interfaceName1, addressType);
+            continue;
+        }
+#endif // CHIP_SYSTEM_CONFIG_USE_LWIP && !CHIP_SYSTEM_CONFIG_USE_OPEN_THREAD_ENDPOINT
+
         chip::Inet::UDPEndPoint * listenUdp;
         ReturnErrorOnFailure(udpEndPointManager->NewEndPoint(&listenUdp));
         std::unique_ptr<chip::Inet::UDPEndPoint, EndpointInfo::EndPointDeletor> endPointHolder(listenUdp, {});

@@ -1012,8 +1012,7 @@ CHIP_ERROR BLEManagerImpl::InitSCMBleLayer(void)
     }
 
     /* Set BLE Host task prio 4 and stack_size max (4096), related fixes need to be synced in npl_freertos_task_init */
-	ble_npl_task_init(&s_task_host, "nimble_host", bleprph_host_task,
-			NULL, 7, 0, NULL, 4096);
+	ble_npl_task_init(&s_task_host, "nimble_host", bleprph_host_task,NULL, 7, 0, NULL, 1024);
 
     xSemaphoreTake(semaphoreHandle, portMAX_DELAY);
     vSemaphoreDelete(semaphoreHandle);

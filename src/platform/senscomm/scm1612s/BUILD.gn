@@ -26,6 +26,12 @@ assert(chip_device_platform == "scm1612s")
 #}
 
 static_library("scm1612s") {
+  # The connectivity manager has temporary debug code that calls
+  # chip::app::DnssdServer directly. The platform layer is not supposed to
+  # depend on //src/app/server (that would create a dependency cycle), so
+  # skip include checking for this target.
+  check_includes = false
+
   sources = [
     "SystemTimeSupport.cpp",
     "../../SingletonConfigurationManager.cpp",

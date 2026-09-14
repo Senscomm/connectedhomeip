@@ -205,29 +205,27 @@ CHIP_ERROR DnssdServer::AdvertiseOperational()
             continue;
         }
 
-        if (fabricInfo.GetFabricIndex() != kPrimaryFabricIndex &&
-            (fabricInfo.GetFabricIndex() != kFailSafeFabricIndex || !mHandlingDnssdRestart))
+        auto & failSafeContext = Server::GetInstance().GetFailSafeContext();
+        if ((fabricInfo.GetFabricIndex() != kPrimaryFabricIndex) &&
+            (fabricInfo.GetFabricIndex() != kFailSafeFabricIndex || !mHandlingDnssdRestart) &&
+            (fabricInfo.GetFabricIndex() == kFailSafeFabricIndex && !mDnssdRestartNeededPending &&
+                failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex))
+        )
         {
-            if (fabricInfo.GetFabricIndex() == kFailSafeFabricIndex)
+            ChipDeviceEvent event;
+            event.Type = DeviceEventType::kDnssdRestartNeeded;
+            mDnssdRestartNeededPending = true;
+            CHIP_ERROR error = DeviceLayer::PlatformMgr().PostEvent(&event);
+            if (error != CHIP_NO_ERROR)
             {
-                auto & failSafeContext = Server::GetInstance().GetFailSafeContext();
-                if (failSafeContext.IsFailSafeArmed(kFailSafeFabricIndex) && !mDnssdRestartNeededPending)
-                {
-                    ChipDeviceEvent event;
-                    event.Type = DeviceEventType::kDnssdRestartNeeded;
-                    mDnssdRestartNeededPending = true;
-                    CHIP_ERROR error = DeviceLayer::PlatformMgr().PostEvent(&event);
-                    if (error != CHIP_NO_ERROR)
-                    {
-                        mDnssdRestartNeededPending = false;
-                        ChipLogError(Discovery, "Failed to post kDnssdRestartNeeded: %" CHIP_ERROR_FORMAT, error.Format());
-                    }
-                    else
-                    {
-                        ChipLogProgress(Discovery, "Posted kDnssdRestartNeeded for fail-safe fabric index %u", static_cast<unsigned>(kFailSafeFabricIndex));
-                    }
-                }
+                mDnssdRestartNeededPending = false;
+                ChipLogError(Discovery, "Failed to post kDnssdRestartNeeded: %" CHIP_ERROR_FORMAT, error.Format());
             }
+            else
+            {
+                ChipLogProgress(Discovery, "Posted kDnssdRestartNeeded for fail-safe fabric index %u", static_cast<unsigned>(kFailSafeFabricIndex));
+            }
+
             continue;
         }
 
@@ -249,7 +247,7 @@ CHIP_ERROR DnssdServer::AdvertiseOperational()
 
         auto & mdnsAdvertiser = chip::Dnssd::ServiceAdvertiser::Instance();
 
-        ChipLogProgress(Discovery, "Advertise operational node " ChipLogFormatX64 "-" ChipLogFormatX64,
+        ChipLogError(Discovery, "Advertise operational node " ChipLogFormatX64 "-" ChipLogFormatX64,
                         ChipLogValueX64(advertiseParameters.GetPeerId().GetCompressedFabricId()),
                         ChipLogValueX64(advertiseParameters.GetPeerId().GetNodeId()));
         // Should we keep trying to advertise the other operational

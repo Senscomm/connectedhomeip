@@ -83,6 +83,8 @@ public:
         VerifyOrReturnError(mLayerState.IsInitialized(), CHIP_ERROR_INCORRECT_STATE);
 
         *retEndPoint = CreateEndPoint();
+        // Debug: dump every allocated endpoint so we can see who occupies the pool at the moment it fills up.
+        // DumpEndPointPoolStats();
         if (*retEndPoint == nullptr)
         {
             ChipLogError(Inet, "%s endpoint pool FULL", EndPointProperties<EndPointType>::kName);
@@ -103,6 +105,12 @@ public:
     virtual void ReleaseEndPoint(EndPoint * endPoint)           = 0;
     virtual Loop ForEachEndPoint(const EndPointVisitor visitor) = 0;
 
+    /// @brief Debug helper: returns the number of endpoints currently allocated from the pool.
+    virtual size_t GetNumAllocatedEndPoints() const = 0;
+
+    /// @brief Debug helper: prints pool usage statistics and every currently-allocated endpoint object.
+    virtual void DumpEndPointPoolStats() const = 0;
+
 private:
     ObjectLifeCycle mLayerState;
     System::Layer * mSystemLayer;
@@ -118,11 +126,38 @@ public:
     EndPointManagerImplPool()           = default;
     ~EndPointManagerImplPool() override = default;
 
-    EndPoint * CreateEndPoint() override { return sEndPointPool.CreateObject(*this); }
+    EndPoint * CreateEndPoint() override
+    {
+        EndPoint * endpoint = sEndPointPool.CreateObject(*this);
+        // if (endpoint != nullptr)
+        // {
+        //     // Debug: print a pool usage summary on every successful endpoint creation.
+        //     ChipLogProgress(Inet, "%s endpoint pool after create: allocated=%u, capacity=%u, highWaterMark=%u",
+        //                     EndPointProperties<EndPoint>::kName, static_cast<unsigned>(sEndPointPool.Allocated()),
+        //                     static_cast<unsigned>(sEndPointPool.Capacity()),
+        //                     static_cast<unsigned>(sEndPointPool.HighWaterMark()));
+        // }
+        return endpoint;
+    }
     void ReleaseEndPoint(EndPoint * endPoint) override { sEndPointPool.ReleaseObject(static_cast<EndPointImpl *>(endPoint)); }
     Loop ForEachEndPoint(const typename Manager::EndPointVisitor visitor) override
     {
         return sEndPointPool.ForEachActiveObject([&](EndPoint * endPoint) -> Loop { return visitor(endPoint); });
+    }
+
+    size_t GetNumAllocatedEndPoints() const override { return sEndPointPool.Allocated(); }
+
+    void DumpEndPointPoolStats() const override
+    {
+        ChipLogError(Inet, "%s endpoint pool: allocated=%u, capacity=%u, highWaterMark=%u", EndPointProperties<EndPoint>::kName,
+                     static_cast<unsigned>(sEndPointPool.Allocated()), static_cast<unsigned>(sEndPointPool.Capacity()),
+                     static_cast<unsigned>(sEndPointPool.HighWaterMark()));
+
+        sEndPointPool.ForEachActiveObject([&](const EndPointImpl * endpoint) {
+            ChipLogError(Inet, "  active %s endpoint %p, appState=%p", EndPointProperties<EndPoint>::kName,
+                         static_cast<const void *>(endpoint), endpoint->mAppState);
+            return Loop::Continue;
+        });
     }
 
 private:

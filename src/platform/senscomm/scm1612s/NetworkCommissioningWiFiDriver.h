@@ -120,6 +120,10 @@ public:
     CHIP_ERROR ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen, const char * key, uint8_t keyLen);
 
     void OnConnectWiFiNetwork();
+
+    void OnConnectWiFiNetworkFailed();
+    static void OnConnectWiFiNetworkFailed(chip::System::Layer * aLayer, void * aAppState);
+
     void OnScanWiFiNetworkDone();
     void ConfigureInitialScan(uint8_t scanRounds);
     bool StartInitialScanOnStationStart();

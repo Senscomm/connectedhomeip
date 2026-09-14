@@ -186,6 +186,35 @@ const scm_wifi_ap_info * FindCachedScanResult(const char * ssid, uint8_t ssidLen
 }
 } // namespace
 
+#if 0
+bool IsStationConnect(void)
+{
+    int ret;
+    scm_wifi_status connect;
+    return (scm_wifi_get_options(SCM_WIFI_STA_GET_CONNECT, &connect) == WISE_OK && connect.status == SCM_WIFI_CONNECTED);
+}
+
+CHIP_ERROR GetConfiguredNetwork(Network & network)
+{
+    wifi_config_t config;
+
+    if (!IsStationConnect() || scm_wifi_get_config(WIFI_IF_STA, &config) == WISE_FAIL)
+    {
+        return CHIP_ERROR_INTERNAL;
+    }
+
+    uint8_t length = static_cast<uint8_t>(strnlen(reinterpret_cast<const char *>(config.sta.ssid), kMaxWiFiSSIDLength));
+    if (length > sizeof(network.networkID))
+    {
+        return CHIP_ERROR_INTERNAL;
+    }
+    memcpy(network.networkID, config.sta.ssid, length);
+    network.networkIDLen = length;
+
+    return CHIP_NO_ERROR;
+}
+#endif
+
 CHIP_ERROR WiseWiFiDriver::Init(NetworkStatusChangeCallback * networkStatusChangeCallback)
 {
     CHIP_ERROR err;
@@ -386,13 +415,16 @@ Status WiseWiFiDriver::AddOrUpdateNetwork(ByteSpan ssid, ByteSpan credentials, M
     memset(mStagingNetwork.credentials, 0, sizeof(mStagingNetwork.credentials));
     memcpy(mStagingNetwork.credentials, credentials.data(), credentials.size());
     mStagingNetwork.credentialsLen = static_cast<decltype(mStagingNetwork.credentialsLen)>(credentials.size());
+    /* The input parameter "credentials" may experience a mismatch between data and length due to packet loss */
+    VerifyOrReturnError(credentials.size() == strlen(mStagingNetwork.credentials), Status::kOutOfRange);
 
     memset(mStagingNetwork.ssid, 0, sizeof(mStagingNetwork.ssid));
     memcpy(mStagingNetwork.ssid, ssid.data(), ssid.size());
     mStagingNetwork.ssidLen = static_cast<decltype(mStagingNetwork.ssidLen)>(ssid.size());
 
     mStagingNetwork.auth_mode = credentials.size() != 0 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-    ChipLogError(NetworkProvisioning, "AddOrUpdateNetwork ssid:%s, cred:%s\n", mStagingNetwork.ssid, mStagingNetwork.credentials);
+
+    ChipLogError(NetworkProvisioning, "AddOrUpdateNetwork ssid:%s, cred:%s, len:%d\n", mStagingNetwork.ssid, mStagingNetwork.credentials, mStagingNetwork.credentialsLen);
     return Status::kSuccess;
 }
 
@@ -435,10 +467,12 @@ CHIP_ERROR WiseWiFiDriver::ConnectSavedNetwork()
 CHIP_ERROR WiseWiFiDriver::ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen, const char * key, uint8_t keyLen)
 {
     scm_wifi_assoc_request req = {0};
-    uint8_t pmk_stored[WISE_PMK_LEN] = {0};
-    scm_wifi_fast_assoc_request fast_request = {0};
-    const scm_wifi_ap_info * cachedApInfo = nullptr;
-    int ret;
+#if 0
+    // uint8_t pmk_stored[WISE_PMK_LEN] = {0};
+    // scm_wifi_fast_assoc_request fast_request = {0};
+    // const scm_wifi_ap_info * cachedApInfo = nullptr;
+    // int ret;
+#endif
     ChipLogError(NetworkProvisioning, "WiseWiFiDriver::ConnectWiFiNetwork");
     VerifyOrReturnError(!IsInitialScanBlockingConnections(), CHIP_ERROR_INCORRECT_STATE);
 
@@ -464,13 +498,15 @@ CHIP_ERROR WiseWiFiDriver::ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen
     }
     req.pairwise = SCM_WIFI_PAIRWISE_AES;
 
-    scm_wifi_sta_set_config(&req, NULL);
+    if (scm_wifi_sta_set_config(&req, NULL) != WISE_OK)
+    {
+        ChipLogError(DeviceLayer, "scm_wifi_sta_set_config() failed");
+        return CHIP_ERROR_INTERNAL;
+    }
+#if 0
     ret = scm_wifi_get_options(SCM_WIFI_STA_GET_PSK, pmk_stored);
 
     ChipLogProgress(NetworkProvisioning, "Setting up connection for WiFi SSID: %s", ssid);
-
-    //ReturnErrorOnFailure(ConnectivityMgr().SetWiFiStationMode(ConnectivityManager::kWiFiStationMode_Disabled));
-    //ReturnErrorOnFailure(ConnectivityMgr().SetWiFiStationMode(ConnectivityManager::kWiFiStationMode_Enabled));
 
     ChipLogProgress(DeviceLayer, "Attempting to connect WiFi station interface");
     cachedApInfo = FindCachedScanResult(ssid, ssidLen);
@@ -510,6 +546,10 @@ CHIP_ERROR WiseWiFiDriver::ConnectWiFiNetwork(const char * ssid, uint8_t ssidLen
         ChipLogError(DeviceLayer, "scm_wifi_connect() failed");
         return CHIP_ERROR_INTERNAL;
     }
+#endif
+
+    ReturnErrorOnFailure(ConnectivityMgr().SetWiFiStationMode(ConnectivityManager::kWiFiStationMode_Disabled));
+    ReturnErrorOnFailure(ConnectivityMgr().SetWiFiStationMode(ConnectivityManager::kWiFiStationMode_Enabled));
 
     return CHIP_NO_ERROR;
 }
@@ -521,9 +561,30 @@ void WiseWiFiDriver::OnConnectWiFiNetwork()
     if (mpConnectCallback)
     {
         CommitConfiguration();
+        DeviceLayer::SystemLayer().CancelTimer(OnConnectWiFiNetworkFailed, NULL);
         mpConnectCallback->OnResult(Status::kSuccess, CharSpan(), 0);
         mpConnectCallback = nullptr;
     }
+}
+
+void WiseWiFiDriver::OnConnectWiFiNetworkFailed()
+{
+    if (mpConnectCallback)
+    {
+        mpConnectCallback->OnResult(Status::kNetworkNotFound, CharSpan(), 0);
+        mpConnectCallback = nullptr;
+    }
+}
+
+void WiseWiFiDriver::OnConnectWiFiNetworkFailed(chip::System::Layer * aLayer, void * aAppState)
+{
+#if 1
+    /* Clear all req infos */
+    scm_wifi_assoc_request req;
+    memset(&req, 0, sizeof(scm_wifi_assoc_request));
+    scm_wifi_sta_set_config(&req, NULL);
+#endif
+    WiseWiFiDriver::GetInstance().OnConnectWiFiNetworkFailed();
 }
 
 CHIP_ERROR WiseWiFiDriver::SetLastDisconnectReason(const ChipDeviceEvent * event)
@@ -542,12 +603,28 @@ void WiseWiFiDriver::ConnectNetwork(ByteSpan networkId, ConnectCallback * callba
 {
     CHIP_ERROR err          = CHIP_NO_ERROR;
     Status networkingStatus = Status::kUnknownError;
+    Network configuredNetwork;
 
     ChipLogProgress(NetworkProvisioning, "WiseWiFiDriver::ConnectNetwork");
 
     VerifyOrExit(NetworkMatch(mStagingNetwork, networkId), networkingStatus = Status::kNetworkIDNotFound);
     VerifyOrExit(mpConnectCallback == nullptr, networkingStatus = Status::kUnknownError);
 
+#if 0
+    if (CHIP_NO_ERROR == GetConfiguredNetwork(configuredNetwork))
+    {
+        printf("Skip ConnectWiFiNetwork00!!!\n");
+        if (NetworkMatch(mStagingNetwork, ByteSpan(configuredNetwork.networkID, configuredNetwork.networkIDLen)))
+        {
+            if (callback)
+            {
+                printf("Skip ConnectWiFiNetwork11!!!\n");
+                callback->OnResult(Status::kSuccess, CharSpan(), 0);
+            }
+            return;
+        }
+    }
+#endif
     err = ConnectWiFiNetwork(mStagingNetwork.ssid, mStagingNetwork.ssidLen, mStagingNetwork.credentials,
                              mStagingNetwork.credentialsLen);
     if (err == CHIP_NO_ERROR)
@@ -556,6 +633,7 @@ void WiseWiFiDriver::ConnectNetwork(ByteSpan networkId, ConnectCallback * callba
         networkingStatus  = Status::kSuccess;
     }
 
+    err = DeviceLayer::SystemLayer().StartTimer(System::Clock::Seconds32(kWiFiConnectNetworkTimeoutSeconds), OnConnectWiFiNetworkFailed, NULL);
 exit:
     if (networkingStatus != Status::kSuccess)
     {
@@ -635,11 +713,13 @@ void WiseWiFiDriver::OnScanWiFiNetworkDone()
         ChipLogProgress(DeviceLayer, "No scan callback");
         if (GetInstance().EnableInitialScan)
         {
-            std::array<scm_wifi_ap_info, kMaxWiFiScanAPs> apBuffer = {};
+            // Use a heap buffer for the per-round scan results instead of a
+            // stack array: the latter cost ~1.7 KB of stack per call.
+            std::unique_ptr<scm_wifi_ap_info[]> apBuffer(new scm_wifi_ap_info[kMaxWiFiScanAPs]());
 
-            if (scm_wifi_sta_scan_results(apBuffer.data(), &apNumber, apBuffer.size()) == WISE_OK)
+            if (apBuffer != nullptr && scm_wifi_sta_scan_results(apBuffer.get(), &apNumber, kMaxWiFiScanAPs) == WISE_OK)
             {
-                MergeWiFiScanResults(apBuffer.data(), apNumber);
+                MergeWiFiScanResults(apBuffer.get(), apNumber);
                 ChipLogProgress(DeviceLayer, "Merged %u WiFi scan results without callback, cache count=%u", apNumber,
                                 gCachedWiFiScanResults.mCount);
             }
@@ -671,55 +751,56 @@ void WiseWiFiDriver::OnScanWiFiNetworkDone()
         return;
     }
 
-    scm_wifi_ap_info * ap_list_buffer = new scm_wifi_ap_info[apNumber]();
-    if (ap_list_buffer == nullptr)
+    // Match the behavior of StartScanWiFiNetworks():
+    //  - if the cache is still valid (a synthetic SCAN_DONE event was posted),
+    //    report the cached results directly without fetching again;
+    //  - otherwise fetch fresh scan results into the static cache (BSS)
+    //    first, then report. No heap buffer is transferred into the async
+    //    lambda, so there is nothing to free asynchronously and no leak risk.
+    if (HasValidCachedWiFiScanResults())
     {
-        ChipLogError(DeviceLayer, "can't malloc memory for ap_list_buffer");
-        GetInstance().mpScanCallback->OnFinished(Status::kUnknownError, CharSpan(), nullptr);
-        GetInstance().mpScanCallback = nullptr;
-        return;
-    }
-
-    if (scm_wifi_sta_scan_results(ap_list_buffer, &num, apNumber) == WISE_OK)
-    {
-        MergeWiFiScanResults(ap_list_buffer, num);
-        const bool hasCachedResults   = HasValidCachedWiFiScanResults();
-        const bool useCachedResults   = hasCachedResults || num == 0;
-        const uint16_t resultCount    = useCachedResults && hasCachedResults ? gCachedWiFiScanResults.mCount : num;
-        const scm_wifi_ap_info * data = useCachedResults && hasCachedResults ? gCachedWiFiScanResults.mResults.data() : ap_list_buffer;
-
-        if (CHIP_NO_ERROR == DeviceLayer::SystemLayer().ScheduleLambda([resultCount, ap_list_buffer, data, useCachedResults]() {
-                std::unique_ptr<scm_wifi_ap_info[]> auto_free(ap_list_buffer);
-                WiseScanResponseIterator iter(resultCount, data);
-                if (GetInstance().mpScanCallback)
-                {
-                    GetInstance().mpScanCallback->OnFinished(Status::kSuccess, CharSpan(), &iter);
-                    GetInstance().mpScanCallback = nullptr;
-                }
-                else
-                {
-                    ChipLogError(DeviceLayer, "can't find the ScanCallback function");
-                }
-            }))
-        {
-            if (useCachedResults)
-            {
-                ChipLogError(DeviceLayer, "Reported merged WiFi scan cache, fresh scan count: %u cache count: %u", num,
-                             gCachedWiFiScanResults.mCount);
-            }
-        }
-        else
-        {
-            delete[] ap_list_buffer;
-            ChipLogError(DeviceLayer, "can't schedule the scan result processing");
-            GetInstance().mpScanCallback->OnFinished(Status::kUnknownError, CharSpan(), nullptr);
-            GetInstance().mpScanCallback = nullptr;
-        }
+        ChipLogError(DeviceLayer, "WiFi scan cache valid, report directly, cache count=%u", gCachedWiFiScanResults.mCount);
     }
     else
     {
-        delete[] ap_list_buffer;
-        ChipLogError(DeviceLayer, "can't get ap_records ");
+        if (scm_wifi_sta_scan_results(gCachedWiFiScanResults.mResults.data(), &num,
+                                      static_cast<uint16_t>(gCachedWiFiScanResults.mResults.size())) != WISE_OK)
+        {
+            ChipLogError(DeviceLayer, "can't get ap_records");
+            GetInstance().mpScanCallback->OnFinished(Status::kUnknownError, CharSpan(), nullptr);
+            GetInstance().mpScanCallback = nullptr;
+            return;
+        }
+
+        if (num > 0)
+        {
+            gCachedWiFiScanResults.mCount     = num;
+            gCachedWiFiScanResults.mTimestamp = System::SystemClock().GetMonotonicTimestamp();
+            gCachedWiFiScanResults.mValid     = true;
+        }
+    }
+
+    const uint16_t resultCount = gCachedWiFiScanResults.mValid ? gCachedWiFiScanResults.mCount : 0;
+
+    if (CHIP_NO_ERROR == DeviceLayer::SystemLayer().ScheduleLambda([resultCount]() {
+            WiseScanResponseIterator iter(resultCount, gCachedWiFiScanResults.mResults.data());
+            if (GetInstance().mpScanCallback)
+            {
+                GetInstance().mpScanCallback->OnFinished(Status::kSuccess, CharSpan(), &iter);
+                GetInstance().mpScanCallback = nullptr;
+            }
+            else
+            {
+                ChipLogError(DeviceLayer, "can't find the ScanCallback function");
+            }
+        }))
+    {
+        ChipLogError(DeviceLayer, "Reported WiFi scan results, fresh scan count: %u cache count: %u", num,
+                     gCachedWiFiScanResults.mCount);
+    }
+    else
+    {
+        ChipLogError(DeviceLayer, "can't schedule the scan result processing");
         GetInstance().mpScanCallback->OnFinished(Status::kUnknownError, CharSpan(), nullptr);
         GetInstance().mpScanCallback = nullptr;
     }

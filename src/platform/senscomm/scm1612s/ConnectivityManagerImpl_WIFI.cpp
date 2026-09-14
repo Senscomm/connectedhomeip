@@ -18,6 +18,7 @@
 /* this file behaves like a config.h, comes first */
 #include <platform/internal/CHIPDeviceLayerInternal.h>
 
+#include <app/server/Dnssd.h>
 #include <platform/ConnectivityManager.h>
 
 #include <lib/support/CodeUtils.h>
@@ -266,7 +267,8 @@ void ConnectivityManagerImpl::_OnWiFiPlatformEvent(const ChipDeviceEvent * event
         break;
     case SYSTEM_EVENT_STA_NO_NETWORK:
     {
-        scm_wifi_sta_connect_advance();
+        /* Maybe sta config sth wrong due to AP changes or bad configs set, ignore this event. */
+        // scm_wifi_sta_connect_advance();
     }
         break;
     default:
@@ -284,6 +286,13 @@ void ConnectivityManagerImpl::_OnWiFiPlatformEvent(const ChipDeviceEvent * event
         NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.credentialsLen = keyLen;
         NetworkCommissioning::WiseWiFiDriver::GetInstance().mTmpNetwork.auth_mode = event->Platform.test.auth;
         NetworkCommissioning::WiseWiFiDriver::GetInstance().Init(NULL);
+    }
+
+    if (event->Platform.test.event.event_id ==  SYSTEM_EVENT_REKEY)
+    {
+        /* Reserve it for subsequent debugging first */
+        printf("Process dbg event - AdvertiseOperational!!\n");
+        chip::app::DnssdServer::Instance().AdvertiseOperational();
     }
 }
 

@@ -49,12 +49,13 @@ namespace DeviceLayer {
 
 using namespace ::chip::DeviceLayer::Internal;
 
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
 CHIP_ERROR LoadFactoryUniqueId(uint8_t (&uniqueId)[ConfigurationManager::kRotatingDeviceIDUniqueIDLength])
 {
     MutableByteSpan uniqueIdSpan(uniqueId);
     return LoadUniqueIdFromFactoryData(uniqueIdSpan);
 }
-
+#endif
 ConfigurationManagerImpl & ConfigurationManagerImpl::GetDefaultInstance()
 {
     static ConfigurationManagerImpl sInstance;
@@ -320,7 +321,7 @@ ConfigurationManager & ConfigurationMgrImpl()
 
 CHIP_ERROR ConfigurationManagerImpl::GetUniqueId(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE || 1
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
     CHIP_ERROR err;
     size_t uniqueIdLen = 0;
     err = SCM1612SConfig::ReadConfigValueStr(SCM1612SConfig::kConfigKey_UniqueId, buf, bufSize, uniqueIdLen);
@@ -374,7 +375,7 @@ CHIP_ERROR ConfigurationManagerImpl::StoreUniqueId(const char * uniqueId, size_t
 
 CHIP_ERROR ConfigurationManagerImpl::GenerateUniqueId(char * buf, size_t bufSize)
 {
-#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE || 1
+#if CONFIG_SENSCOMM_FACTORY_DATA_ENABLE
     uint8_t uniqueId[ConfigurationManager::kRotatingDeviceIDUniqueIDLength] = {};
     CHIP_ERROR err = LoadFactoryUniqueId(uniqueId);
 
