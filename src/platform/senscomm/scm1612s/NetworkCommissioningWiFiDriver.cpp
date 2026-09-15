@@ -578,7 +578,7 @@ void WiseWiFiDriver::OnConnectWiFiNetworkFailed()
 
 void WiseWiFiDriver::OnConnectWiFiNetworkFailed(chip::System::Layer * aLayer, void * aAppState)
 {
-#if 1
+#if 0
     /* Clear all req infos */
     scm_wifi_assoc_request req;
     memset(&req, 0, sizeof(scm_wifi_assoc_request));
