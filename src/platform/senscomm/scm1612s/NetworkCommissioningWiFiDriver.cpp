@@ -249,13 +249,12 @@ CHIP_ERROR WiseWiFiDriver::Init(NetworkStatusChangeCallback * networkStatusChang
                                            ssidLen);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
 
-    err = SCM1612SConfig::ReadConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, mSavedNetwork.credentials,
-                                           sizeof(mSavedNetwork.credentials), credentialsLen);
-    VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
-
     err = SCM1612SConfig::ReadConfigValueBin(SCM1612SConfig::kConfigKey_WiFiSEC, &mSavedNetwork.auth_mode,
                                            sizeof(mSavedNetwork.auth_mode), outLen);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
+    err = SCM1612SConfig::ReadConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, mSavedNetwork.credentials,
+                                           sizeof(mSavedNetwork.credentials), credentialsLen);
+    // VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_NO_ERROR);
 
     mSavedNetwork.credentialsLen = credentialsLen;
     mSavedNetwork.ssidLen        = ssidLen;
@@ -336,11 +335,9 @@ CHIP_ERROR WiseWiFiDriver::CommitConfiguration()
     ChipLogProgress(NetworkProvisioning, "WiseWiFiDriver::CommitConfiguration");
 
     ReturnErrorOnFailure(SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiSSID, mStagingNetwork.ssid));
-
-    ReturnErrorOnFailure(SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, mStagingNetwork.credentials));
-
     ReturnErrorOnFailure(SCM1612SConfig::WriteConfigValueBin(SCM1612SConfig::kConfigKey_WiFiSEC, &mStagingNetwork.auth_mode,
-                                                           sizeof(mStagingNetwork.auth_mode)));
+                                                        sizeof(mStagingNetwork.auth_mode)));
+    ReturnErrorOnFailure(SCM1612SConfig::WriteConfigValueStr(SCM1612SConfig::kConfigKey_WiFiPSK, mStagingNetwork.credentials));
 
     mSavedNetwork = mStagingNetwork;
 
@@ -578,7 +575,7 @@ void WiseWiFiDriver::OnConnectWiFiNetworkFailed()
 
 void WiseWiFiDriver::OnConnectWiFiNetworkFailed(chip::System::Layer * aLayer, void * aAppState)
 {
-#if 1
+#if 0
     /* Clear all req infos */
     scm_wifi_assoc_request req;
     memset(&req, 0, sizeof(scm_wifi_assoc_request));
